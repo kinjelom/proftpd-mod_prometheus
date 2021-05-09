@@ -1,0 +1,17 @@
+configure
+Makefile
+config.log
+config.status
+autom4te.cache
+mod_prometheus.h
+tests.log
+t/api-tests
+t/api-tests.log
+.libs
+*.a
+*.sw?
+*.la
+*.lo
+*Tests*.log
+*.o
+*~
