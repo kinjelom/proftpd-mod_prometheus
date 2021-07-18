@@ -55,7 +55,7 @@ static void tear_down(void) {
     pr_trace_set_levels("prometheus.db", 0, 0);
   }
 
-  if (p) {
+  if (p != NULL) {
     destroy_pool(p);
     p = permanent_pool = NULL;
     session.c = NULL;
@@ -68,12 +68,14 @@ static void tear_down(void) {
 START_TEST (db_close_test) {
   int res;
 
-  res = prometheus_db_close(NULL, NULL);
+  mark_point();
+  res = prom_db_close(NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
 
-  res = prometheus_db_close(p, NULL);
+  mark_point();
+  res = prom_db_close(p, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
@@ -85,12 +87,14 @@ START_TEST (db_open_test) {
   const char *table_path, *schema_name;
   struct prom_dbh *dbh;
 
-  dbh = prometheus_db_open(NULL, NULL, NULL);
+  mark_point();
+  dbh = prom_db_open(NULL, NULL, NULL);
   fail_unless(dbh == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
 
-  dbh = prometheus_db_open(p, NULL, NULL);
+  mark_point();
+  dbh = prom_db_open(p, NULL, NULL);
   fail_unless(dbh == NULL, "Failed to handle null table path");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
@@ -99,16 +103,19 @@ START_TEST (db_open_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, NULL);
+  mark_point();
+  dbh = prom_db_open(p, table_path, NULL);
   fail_unless(dbh == NULL, "Failed to handle null schema name");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  mark_point();
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close table '%s': %s", table_path,
     strerror(errno));
   (void) unlink(db_test_table);
@@ -121,7 +128,8 @@ START_TEST (db_open_with_version_test) {
   const char *table_path, *schema_name;
   unsigned int schema_version;
 
-  dbh = prometheus_db_open_with_version(NULL, NULL, NULL, 0, 0);
+  mark_point();
+  dbh = prom_db_open_with_version(NULL, NULL, NULL, 0, 0);
   fail_unless(dbh == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
     strerror(errno), errno);
@@ -132,39 +140,40 @@ START_TEST (db_open_with_version_test) {
   schema_version = 0;
 
   mark_point();
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   flags |= PROXY_DB_OPEN_FL_INTEGRITY_CHECK;
 
   mark_point();
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
-  if (getenv("TRAVIS") == NULL) {
+  if (getenv("CI") == NULL &&
+      getenv("TRAVIS") == NULL) {
     /* Enable the vacuuming for these tests. */
     flags |= PROXY_DB_OPEN_FL_VACUUM;
 
     mark_point();
-    dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+    dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
       flags);
     fail_unless(dbh != NULL,
       "Failed to open table '%s', schema '%s', version %u: %s", table_path,
       schema_name, schema_version, strerror(errno));
 
-    res = prometheus_db_close(p, dbh);
+    res = prom_db_close(p, dbh);
     fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
     flags &= ~PROXY_DB_OPEN_FL_VACUUM;
@@ -175,7 +184,7 @@ START_TEST (db_open_with_version_test) {
   mark_point();
   schema_version = 76;
   flags |= PROXY_DB_OPEN_FL_SCHEMA_VERSION_CHECK|PROXY_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh == NULL, "Opened table with version skew unexpectedly");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
@@ -183,35 +192,35 @@ START_TEST (db_open_with_version_test) {
 
   mark_point();
   flags &= ~PROXY_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   mark_point();
   schema_version = 76;
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close databas: %s", strerror(errno));
 
   mark_point();
   schema_version = 99;
-  dbh = prometheus_db_open_with_version(p, table_path, schema_name, schema_version,
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -223,12 +232,14 @@ START_TEST (db_exec_stmt_test) {
   const char *table_path, *schema_name, *stmt, *errstr;
   struct prom_dbh *dbh;
 
-  res = prometheus_db_exec_stmt(NULL, NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_exec_stmt(NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_exec_stmt(p, NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_exec_stmt(p, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -237,23 +248,26 @@ START_TEST (db_exec_stmt_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_exec_stmt(p, dbh, NULL, NULL);
+  mark_point();
+  res = prom_db_exec_stmt(p, dbh, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null statement");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo;";
   errstr = NULL;
-  res = prometheus_db_exec_stmt(p, dbh, stmt, &errstr);
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   fail_unless(res < 0, "Failed to execute statement '%s'", stmt);
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -267,7 +281,7 @@ static int create_table(pool *stmt_pool, struct prom_dbh *dbh,
 
   stmt = pstrcat(stmt_pool, "CREATE TABLE ", table_name,
     " (id INTEGER, name TEXT);", NULL);
-  res = prometheus_db_exec_stmt(stmt_pool, dbh, stmt, &errstr);
+  res = prom_db_exec_stmt(stmt_pool, dbh, stmt, &errstr);
   return res;
 }
 
@@ -276,12 +290,14 @@ START_TEST (db_prepare_stmt_test) {
   const char *table_path, *schema_name, *stmt;
   struct prom_dbh *dbh;
 
-  res = prometheus_db_prepare_stmt(NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_prepare_stmt(NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_prepare_stmt(p, NULL, NULL);
+  mark_point();
+  res = prom_db_prepare_stmt(p, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -290,17 +306,20 @@ START_TEST (db_prepare_stmt_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_prepare_stmt(p, dbh, NULL);
+  mark_point();
+  res = prom_db_prepare_stmt(p, dbh, NULL);
   fail_unless(res < 0, "Failed to handle null statement");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "foo bar baz?";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res < 0, "Prepared invalid statement '%s' unexpectedly", stmt);
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -308,24 +327,27 @@ START_TEST (db_prepare_stmt_test) {
   res = create_table(p, dbh, "foo");
   fail_unless(res == 0, "Failed to create table 'foo': %s", strerror(errno));
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo;";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
-  fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
+  mark_point();
+  res = prom_db_finish_stmt(p, dbh, stmt);
+  fail_unless(res == 0, "Failed to finish statement '%s': %s", stmt,
     strerror(errno));
 
   res = create_table(p, dbh, "bar");
   fail_unless(res == 0, "Failed to create table 'bar': %s", strerror(errno));
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM bar;";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -337,12 +359,14 @@ START_TEST (db_finish_stmt_test) {
   const char *table_path, *schema_name, *stmt;
   struct prom_dbh *dbh;
 
-  res = prometheus_db_finish_stmt(NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_finish_stmt(NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null arguments");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_finish_stmt(p, NULL, NULL);
+  mark_point();
+  res = prom_db_finish_stmt(p, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -351,17 +375,20 @@ START_TEST (db_finish_stmt_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_finish_stmt(p, dbh, NULL);
+  mark_point();
+  res = prom_db_finish_stmt(p, dbh, NULL);
   fail_unless(res < 0, "Failed to handle null statement");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo";
-  res = prometheus_db_finish_stmt(p, dbh, stmt);
+  res = prom_db_finish_stmt(p, dbh, stmt);
   fail_unless(res < 0, "Failed to handle unprepared statement");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got '%s' (%d)", ENOENT,
     strerror(errno), errno);
@@ -369,20 +396,23 @@ START_TEST (db_finish_stmt_test) {
   res = create_table(p, dbh, "foo");
   fail_unless(res == 0, "Failed to create table 'foo': %s", strerror(errno));
 
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  mark_point();
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
-  res = prometheus_db_finish_stmt(p, dbh, stmt);
+  mark_point();
+  res = prom_db_finish_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to finish statement '%s': %s", stmt,
     strerror(errno));
 
-  res = prometheus_db_finish_stmt(p, dbh, stmt);
+  mark_point();
+  res = prom_db_finish_stmt(p, dbh, stmt);
   fail_unless(res < 0, "Failed to handle unprepared statement");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got '%s' (%d)", ENOENT,
     strerror(errno), errno);
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -397,12 +427,14 @@ START_TEST (db_bind_stmt_test) {
   long long_val;
   char *text_val;
 
-  res = prometheus_db_bind_stmt(NULL, NULL, NULL, -1, -1, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(NULL, NULL, NULL, -1, -1, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_bind_stmt(p, NULL, NULL, -1, -1, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, NULL, NULL, -1, -1, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -411,24 +443,28 @@ START_TEST (db_bind_stmt_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_bind_stmt(p, dbh, NULL, -1, -1, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, dbh, NULL, -1, -1, NULL);
   fail_unless(res < 0, "Failed to handle null statement");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM table";
   idx = -1;
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle invalid index %d", idx);
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   idx = 1;
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle unprepared statement");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got '%s' (%d)", ENOENT,
     strerror(errno), errno);
@@ -436,61 +472,70 @@ START_TEST (db_bind_stmt_test) {
   res = create_table(p, dbh, "foo");
   fail_unless(res == 0, "Failed to create table 'foo': %s", strerror(errno));
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo;";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle missing INT value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   int_val = 7;
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG, NULL);
   fail_unless(res < 0, "Failed to handle missing LONG value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   long_val = 7;
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG,
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG,
     &long_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT, NULL);
   fail_unless(res < 0, "Failed to handle missing TEXT value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   text_val = "testing";
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT,
-    text_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT, text_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_NULL, NULL);
+  mark_point();
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_NULL, NULL);
   fail_unless(res < 0, "Failed to handle invalid NULL value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo WHERE id = ?;";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
+  mark_point();
   int_val = 7;
-  res = prometheus_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
   fail_unless(res == 0, "Failed to bind INT value: %s", strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -503,12 +548,14 @@ START_TEST (db_exec_prepared_stmt_test) {
   const char *table_path, *schema_name, *stmt, *errstr = NULL;
   struct prom_dbh *dbh;
 
-  results = prometheus_db_exec_prepared_stmt(NULL, NULL, NULL, NULL);
+  mark_point();
+  results = prom_db_exec_prepared_stmt(NULL, NULL, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  results = prometheus_db_exec_prepared_stmt(p, NULL, NULL, NULL);
+  mark_point();
+  results = prom_db_exec_prepared_stmt(p, NULL, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -517,17 +564,20 @@ START_TEST (db_exec_prepared_stmt_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  results = prometheus_db_exec_prepared_stmt(p, dbh, NULL, NULL);
+  mark_point();
+  results = prom_db_exec_prepared_stmt(p, dbh, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle null statement");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   stmt = "SELECT COUNT(*) FROM foo;";
-  results = prometheus_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   fail_unless(results == NULL, "Failed to handle unprepared statement");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got '%s' (%d)", ENOENT,
     strerror(errno), errno);
@@ -535,16 +585,18 @@ START_TEST (db_exec_prepared_stmt_test) {
   res = create_table(p, dbh, "foo");
   fail_unless(res == 0, "Failed to create table 'foo': %s", strerror(errno));
 
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  mark_point();
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   fail_unless(res == 0, "Failed to prepare statement '%s': %s", stmt,
     strerror(errno));
 
-  results = prometheus_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  mark_point();
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   fail_unless(results != NULL,
     "Failed to execute prepared statement '%s': %s (%s)", stmt, errstr,
     strerror(errno));
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);
@@ -556,12 +608,14 @@ START_TEST (db_reindex_test) {
   const char *table_path, *schema_name, *index_name, *errstr = NULL;
   struct prom_dbh *dbh;
 
-  res = prometheus_db_reindex(NULL, NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_reindex(NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
-  res = prometheus_db_reindex(p, NULL, NULL, NULL);
+  mark_point();
+  res = prom_db_reindex(p, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null dbh");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
@@ -570,23 +624,26 @@ START_TEST (db_reindex_test) {
   table_path = db_test_table;
   schema_name = "prometheus_test";
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
   fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
     strerror(errno));
 
-  res = prometheus_db_reindex(p, dbh, NULL, NULL);
+  mark_point();
+  res = prom_db_reindex(p, dbh, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null index name");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   index_name = "test_idx";
-  res = prometheus_db_reindex(p, dbh, index_name, &errstr);
+  res = prom_db_reindex(p, dbh, index_name, &errstr);
   fail_unless(res < 0, "Failed to handle invalid index");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
   fail_unless(errstr != NULL, "Failed to provide error string");
 
-  res = prometheus_db_close(p, dbh);
+  res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
   (void) unlink(db_test_table);

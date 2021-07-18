@@ -252,7 +252,7 @@ static int stmt_cb(void *v, int ncols, char **cols, char **col_names) {
   return 0;
 }
 
-int prometheus_db_exec_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
+int prom_db_exec_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
     const char **errstr) {
   int res;
   char *ptr = NULL;
@@ -317,7 +317,7 @@ int prometheus_db_exec_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
 
 /* Prepared statements */
 
-int prometheus_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
+int prom_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
   sqlite3_stmt *pstmt = NULL;
   int res;
 
@@ -367,7 +367,7 @@ int prometheus_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) 
   return 0; 
 }
 
-int prometheus_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
+int prom_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
     int idx, int type, void *data) {
   sqlite3_stmt *pstmt;
   int res;
@@ -480,7 +480,7 @@ int prometheus_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
   return 0;
 }
 
-int prometheus_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
+int prom_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
   sqlite3_stmt *pstmt;
   int res;
 
@@ -688,7 +688,7 @@ struct prom_dbh *prometheus_db_open(pool *p, const char *table_path,
   dbh->schema = pstrdup(dbh->pool, schema_name);
 
   stmt = "PRAGMA temp_store = MEMORY;";
-  res = prometheus_db_exec_stmt(p, dbh, stmt, NULL);
+  res = prom_db_exec_stmt(p, dbh, stmt, NULL);
   if (res < 0) {
     pr_trace_msg(trace_channel, 2,
       "error setting MEMORY temp store on SQLite database '%s': %s",
@@ -701,7 +701,7 @@ struct prom_dbh *prometheus_db_open(pool *p, const char *table_path,
    */
 
   stmt = "PRAGMA journal_mode = MEMORY;";
-  res = prometheus_db_exec_stmt(p, dbh, stmt, NULL);
+  res = prom_db_exec_stmt(p, dbh, stmt, NULL);
   if (res < 0) {
     pr_trace_msg(trace_channel, 2,
       "error setting MEMORY journal mode on SQLite database '%s': %s",
@@ -721,7 +721,7 @@ static int get_schema_version(pool *p, struct prom_dbh *dbh,
   array_header *results;
 
   stmt = "SELECT version FROM schema_version WHERE schema = ?;";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   if (res < 0) {
     /* This can happen when the schema_version table does not exist; treat
      * as "missing".
@@ -733,13 +733,13 @@ static int get_schema_version(pool *p, struct prom_dbh *dbh,
     return 0;
   }
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
     (void *) schema_name);
   if (res < 0) {
     return -1;
   }
 
-  results = prometheus_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   if (results == NULL) {
     *schema_version = 0;
     return 0;
@@ -779,7 +779,7 @@ static int set_schema_version(pool *p, struct prom_dbh *dbh,
    * );
    */
   stmt = "CREATE TABLE IF NOT EXISTS schema_version (schema TEXT NOT NULL PRIMARY KEY, version INTEGER NOT NULL);";
-  res = prometheus_db_exec_stmt(p, dbh, stmt, &errstr);
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_debug(DEBUG3, MOD_PROMETHEUS_VERSION
       ": error executing statement '%s': %s", stmt, errstr);
@@ -788,7 +788,7 @@ static int set_schema_version(pool *p, struct prom_dbh *dbh,
   }
 
   stmt = "INSERT INTO schema_version (schema, version) VALUES (?, ?);";
-  res = prometheus_db_prepare_stmt(p, dbh, stmt);
+  res = prom_db_prepare_stmt(p, dbh, stmt);
   if (res < 0) {
     xerrno = errno;
 
@@ -799,19 +799,19 @@ static int set_schema_version(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
     (void *) schema_name);
   if (res < 0) {
     return -1;
   }
 
-  res = prometheus_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_INT,
+  res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_INT,
     (void *) &schema_version);
   if (res < 0) {
     return -1;
   }
 
-  results = prometheus_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   if (results == NULL) {
     (void) pr_log_debug(DEBUG3, MOD_PROMETHEUS_VERSION
       ": error executing statement '%s': %s", stmt,
@@ -829,7 +829,7 @@ static void check_db_integrity(pool *p, struct prom_dbh *dbh, int flags) {
 
   if (flags & PROM_DB_OPEN_FL_INTEGRITY_CHECK) {
     stmt = "PRAGMA integrity_check;";
-    res = prometheus_db_exec_stmt(p, dbh, stmt, &errstr);
+    res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
     if (res < 0) {
       (void) pr_log_debug(DEBUG3, MOD_PROMETHEUS_VERSION
         ": error executing statement '%s': %s", stmt, errstr);
@@ -838,7 +838,7 @@ static void check_db_integrity(pool *p, struct prom_dbh *dbh, int flags) {
 
   if (flags & PROM_DB_OPEN_FL_VACUUM) {
     stmt = "VACUUM;";
-    res = prometheus_db_exec_stmt(p, dbh, stmt, &errstr);
+    res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
     if (res < 0) {
       (void) pr_log_debug(DEBUG3, MOD_PROMETHEUS_VERSION
         ": error executing statement '%s': %s", stmt, errstr);
@@ -853,7 +853,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
   int res = 0, xerrno = 0;
   unsigned int current_version = 0;
 
-  dbh = prometheus_db_open(p, table_path, schema_name);
+  dbh = prom_db_open(p, table_path, schema_name);
   if (dbh == NULL) {
     return NULL;
   }
@@ -868,7 +868,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
       if (res < 0) {
       xerrno = errno;
 
-      prometheus_db_close(p, dbh);
+      prom_db_close(p, dbh);
       destroy_pool(tmp_pool);
       errno = xerrno;
       return NULL;
@@ -889,7 +889,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
       pr_trace_msg(trace_channel, 5,
         "schema version %u < desired version %u for path '%s', failing",
         current_version, schema_version, table_path);
-      prometheus_db_close(p, dbh);
+      prom_db_close(p, dbh);
       destroy_pool(tmp_pool);
       errno = EPERM;
       return NULL;
@@ -910,7 +910,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
         ": error deleting '%s': %s", table_path, strerror(errno));
     }
 
-    dbh = prometheus_db_open(p, table_path, schema_name);
+    dbh = prom_db_open(p, table_path, schema_name);
     if (dbh == NULL) {
       xerrno = errno;
 
@@ -936,7 +936,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
   return dbh;
 }
 
-int prometheus_db_close(pool *p, struct prom_dbh *dbh) {
+int prom_db_close(pool *p, struct prom_dbh *dbh) {
   pool *tmp_pool;
   sqlite3_stmt *pstmt;
   int res;
@@ -994,7 +994,7 @@ int prometheus_db_close(pool *p, struct prom_dbh *dbh) {
   return 0;
 }
 
-int prometheus_db_reindex(pool *p, struct prom_dbh *dbh, const char *index_name,
+int prom_db_reindex(pool *p, struct prom_dbh *dbh, const char *index_name,
     const char **errstr) {
   int res;
   const char *stmt;
@@ -1007,11 +1007,11 @@ int prometheus_db_reindex(pool *p, struct prom_dbh *dbh, const char *index_name,
   }
 
   stmt = pstrcat(p, "REINDEX ", index_name, ";", NULL);
-  res = prometheus_db_exec_stmt(p, dbh, stmt, errstr);
+  res = prom_db_exec_stmt(p, dbh, stmt, errstr);
   return res;
 }
 
-int prometheus_db_init(pool *p) {
+int prom_db_init(pool *p) {
   const char *version;
 
   if (p == NULL) {
@@ -1044,6 +1044,6 @@ int prometheus_db_init(pool *p) {
   return 0;
 }
 
-int prometheus_db_free(void) {
+int prom_db_free(void) {
   return 0;
 }

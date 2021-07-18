@@ -29,11 +29,11 @@
 
 struct prom_dbh;
 
-int prometheus_db_init(pool *p);
-int prometheus_db_free(void);
+int prom_db_init(pool *p);
+int prom_db_free(void);
 
 /* Create/prepare the database (with the given schema name) at the given path */
-struct prom_dbh *prometheus_db_open(pool *p, const char *table_path,
+struct prom_dbh *prom_db_open(pool *p, const char *table_path,
   const char *schema_name);
 
 /* Create/prepare the database (with the given schema name) at the given path.
@@ -41,9 +41,8 @@ struct prom_dbh *prometheus_db_open(pool *p, const char *table_path,
  * greater than or equal to the given minimum version.  If not, delete that
  * database and create a new one.
  */
-struct prom_dbh *prometheus_db_open_with_version(pool *p,
-  const char *table_path, const char *schema_name,
-  unsigned int schema_version, int flags);
+struct prom_dbh *prom_db_open_with_version(pool *p, const char *table_path,
+  const char *schema_name, unsigned int schema_version, int flags);
 #define PROM_DB_OPEN_FL_SCHEMA_VERSION_CHECK		0x001
 #define PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW	0x002
 #define PROM_DB_OPEN_FL_INTEGRITY_CHECK			0x004
@@ -51,12 +50,12 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p,
 #define PROM_DB_OPEN_FL_SKIP_VACUUM			0x010
 
 /* Close the database. */
-int prometheus_db_close(pool *p, struct prom_dbh *dbh);
+int prom_db_close(pool *p, struct prom_dbh *dbh);
 
-int prometheus_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt);
-int prometheus_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt);
-int prometheus_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
-  int idx, int type, void *data);
+int prom_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt);
+int prom_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt);
+int prom_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt, int idx,
+  int type, void *data);
 #define PROM_DB_BIND_TYPE_INT		1
 #define PROM_DB_BIND_TYPE_LONG		2
 #define PROM_DB_BIND_TYPE_TEXT		3
@@ -65,15 +64,15 @@ int prometheus_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
 /* Executes the given statement.  Assumes that the caller is not using a SELECT,
  * and/or is uninterested in the statement results.
  */
-int prometheus_db_exec_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
+int prom_db_exec_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
   const char **errstr);
 
 /* Executes the given statement as a previously prepared statement. */
-array_header *prometheus_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
+array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
   const char *stmt, const char **errstr);
 
 /* Rebuild the named index. */
-int prometheus_db_reindex(pool *p, struct prom_dbh *dbh,
+int prom_db_reindex(pool *p, struct prom_dbh *dbh,
   const char *index_name, const char **errstr);
 
 #endif /* MOD_PROMETHEUS_DB_H */
