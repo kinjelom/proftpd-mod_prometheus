@@ -28,9 +28,9 @@
 #include "conf.h"
 #include "privs.h"
 
-/* Define if you have the libmicrohttpd.h header.  */
-#undef HAVE_LIBMICROHTTPD_H
-#if !defined(HAVE_LIBMICROHTTPD_H)
+/* Define if you have the microhttpd.h header.  */
+#undef HAVE_MICROHTTPD_H
+#if !defined(HAVE_MICROHTTPD_H)
 # error "libmicrohttpd library/headers required"
 #endif
 

@@ -26,7 +26,7 @@
 #include "http.h"
 
 /* Per libmicrohttpd docs, we should define this after we have our system
- * headers, but before including `libmicrohttpd.h`.
+ * headers, but before including `microhttpd.h`.
  */
 #define MHD_PLATFORM_H	1
-#include <libmicrohttpd.h>
+#include <microhttpd.h>

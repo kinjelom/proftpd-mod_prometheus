@@ -64,7 +64,7 @@ AC_ARG_WITH(libraries,
   ])
 
 AC_HEADER_STDC
-AC_CHECK_HEADERS(libmicrohttpd.h sqlite3.h stdlib.h unistd.h limits.h fcntl.h sys/sysctl.h sys/sysinfo.h)
+AC_CHECK_HEADERS(microhttpd.h sqlite3.h stdlib.h unistd.h limits.h fcntl.h sys/sysctl.h sys/sysinfo.h)
 AC_CHECK_FUNCS(sysctl sysinfo)
 
 # Check for SQLite-isms
