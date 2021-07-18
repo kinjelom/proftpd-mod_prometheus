@@ -106,6 +106,7 @@ jobs:
           gcc --version
 
       - name: Prepare code coverage
+        if: ${{ matrix.container == 'ubuntu:18.04' }}
         run: |
           lcov --directory proftpd --zerocounters
 
