@@ -3735,7 +3735,7 @@ $as_echo "#define STDC_HEADERS 1" >>confdefs.h
 
 fi
 
-for ac_header in microhttpd.h sqlite3.h stdlib.h unistd.h limits.h fcntl.h sys/sysctl.h sys/sysinfo.h
+for ac_header in microhttpd.h sqlite3.h stdlib.h unistd.h limits.h fcntl.h sys/sysctl.h sys/sysinfo.h zlib.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -3760,6 +3760,50 @@ _ACEOF
 fi
 done
 
+
+# Check for libmicrohttpd-isms
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for MHD_run_wait" >&5
+$as_echo_n "checking for MHD_run_wait... " >&6; }
+saved_libs="$LIBS"
+LIBS="-lmicrohttpd"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+    #include <stdlib.h>
+    #include <sys/types.h>
+    #define MHD_PLATFORM_H 1
+    #ifdef HAVE_MICROHTTPD_H
+    # include <microhttpd.h>
+    #endif
+
+int
+main ()
+{
+
+    (void) MHD_run_wait(NULL, 0);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+$as_echo "#define HAVE_MHD_RUN_WAIT 1" >>confdefs.h
+
+
+else
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS="$saved_libs"
 
 # Check for SQLite-isms
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for sqlite3_stmt_readonly" >&5

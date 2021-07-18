@@ -27,6 +27,15 @@
 
 #include "mod_prometheus.h"
 
+struct prom_http;
+
+struct prom_http *prom_http_start(pool *p, unsigned short http_port);
+
+/* This function will exit once the exporter finishes. */
+int prom_http_run_loop(pool *p, struct prom_http *http);
+
+int prom_http_stop(pool *p, struct prom_http *http);
+
 int prom_http_init(pool *p);
 int prom_http_free(void);
 

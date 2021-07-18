@@ -40,6 +40,12 @@
 # error "SQLite library/headers required"
 #endif
 
+/* Define if you have the zlib.h header.  */
+#undef HAVE_ZLIB_H
+
+/* Define if you have the MHD_run_wait function.  */
+#undef HAVE_MHD_RUN_WAIT
+
 /* Define if you have the sqlite3_stmt_readonly() function.  */
 #undef HAVE_SQLITE3_STMT_READONLY
 

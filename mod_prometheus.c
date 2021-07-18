@@ -41,7 +41,9 @@ int prometheus_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
+static struct prom_http *prometheus_exporter_http = NULL;
 static pid_t prometheus_exporter_pid = 0;
+
 static int prometheus_engine = FALSE;
 static unsigned long prometheus_opts = 0UL;
 static struct timeval prometheus_start_tv;
@@ -217,7 +219,8 @@ static void prom_daemonize(const char *daemon_dir) {
   pr_fsio_chdir(daemon_dir, 0);
 }
 
-static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
+static pid_t prom_exporter_start(pool *p, const char *tables_dir,
+    unsigned short exporter_port) {
   pid_t exporter_pid;
   char *exporter_chroot = NULL;
 
@@ -254,16 +257,13 @@ static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
   /* Remove our event listeners. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
-/* XXX MHD_start_daemon() */
   PRIVS_ROOT
-
   if (getuid() == PR_ROOT_UID) {
     int res;
 
     /* Chroot to the PrometheusTables/empty/ directory before dropping
      * root privs.
      */
-
     exporter_chroot = pdircat(prometheus_pool, tables_dir, "empty", NULL);
     res = chroot(exporter_chroot);
     if (res < 0) {
@@ -298,6 +298,11 @@ static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
   session.gid = getegid();
   PRIVS_REVOKE
 
+  prometheus_exporter_http = prom_http_start(p, exporter_port);
+  if (prometheus_exporter_http == NULL) {
+    return 0;
+  }
+
   if (exporter_chroot != NULL) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
       "exporter process running with UID %s, GID %s, restricted to '%s'",
@@ -311,7 +316,9 @@ static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
       pr_gid2str(prometheus_pool, getgid()), getcwd(NULL, 0));
   }
 
-  /* When we are done, we simply exit. */;
+  /* This function will exit once the exporter finishes. */
+  prom_http_run_loop(p, prometheus_exporter_http);
+
   pr_trace_msg(trace_channel, 3, "exporter PID %lu exiting",
     (unsigned long) session.pid);
   exit(0);
@@ -447,7 +454,7 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
 MODRET set_prometheusexporter(cmd_rec *cmd) {
   char *ptr;
   config_rec *c;
-  int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
+  unsigned short exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
@@ -462,16 +469,19 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
      */
 
   } else {
-    exporter_port = atoi(cmd->argv[1]);
-    if (exporter_port < 1 ||
-        exporter_port > 65535) {
+    int port;
+
+    port = atoi(cmd->argv[1]);
+    if (port < 1 || port > 65535) {
       CONF_ERROR(cmd, "port must be between 1-65535");
     }
+
+    exporter_port = (unsigned short) port;
   }
 
   c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = pcalloc(c->pool, sizeof(int));
-  *((int *) c->argv[0]) = exporter_port;
+  c->argv[0] = pcalloc(c->pool, sizeof(unsigned short));
+  *((unsigned short *) c->argv[0]) = exporter_port;
  
   return PR_HANDLED(cmd);
 }
@@ -1005,9 +1015,10 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  exporter_port = *((int *) c->argv[0]);
+  exporter_port = *((unsigned short *) c->argv[0]);
 
-  prometheus_exporter_pid = prom_exporter_start(tables_dir, exporter_port);
+  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, tables_dir,
+    exporter_port);
   if (prometheus_exporter_pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
