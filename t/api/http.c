@@ -55,6 +55,85 @@ static void tear_down(void) {
   }
 }
 
+START_TEST (http_init_test) {
+  int res;
+
+  mark_point();
+  res = prom_http_init(NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_http_init(p);
+  fail_unless(res == 0, "Failed to init HTTP API: %s", strerror(errno));
+}
+END_TEST
+
+START_TEST (http_free_test) {
+  int res;
+
+  mark_point();
+  res = prom_http_free();
+  fail_unless(res == 0, "Failed to free HTTP API: %s", strerror(errno));
+}
+END_TEST
+
+START_TEST (http_stop_test) {
+  int res;
+
+  mark_point();
+  res = prom_http_stop(NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_http_stop(p, NULL);
+  fail_unless(res < 0, "Failed to handle null http");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (http_start_test) {
+  int res;
+  struct prom_http *http;
+
+  mark_point();
+  http = prom_http_start(NULL, 0);
+  fail_unless(http == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  http = prom_http_start(p, 0);
+  fail_unless(http != NULL, "Failed to start http: %s", strerror(errno));
+
+  mark_point();
+  res = prom_http_stop(p, http);
+  fail_unless(res == 0, "Failed to stop http: %s", strerror(errno));
+}
+END_TEST
+
+START_TEST (http_run_loop_test) {
+  int res;
+  struct prom_http *http;
+
+  mark_point();
+  res = prom_http_run_loop(NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_http_run_loop(p, NULL);
+  fail_unless(res < 0, "Failed to handle null http");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
 Suite *tests_get_http_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -63,6 +142,12 @@ Suite *tests_get_http_suite(void) {
   testcase = tcase_create("base");
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  tcase_add_test(testcase, http_init_test);
+  tcase_add_test(testcase, http_free_test);
+  tcase_add_test(testcase, http_stop_test);
+  tcase_add_test(testcase, http_start_test);
+  tcase_add_test(testcase, http_run_loop_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

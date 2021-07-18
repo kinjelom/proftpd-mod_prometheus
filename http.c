@@ -250,21 +250,20 @@ struct prom_http *prom_http_start(pool *p, unsigned short http_port) {
 }
 
 int prom_http_run_loop(pool *p, struct prom_http *http) {
+  unsigned long sleep_ms = 500;
+
   if (p == NULL ||
       http == NULL) {
     errno = EINVAL;
     return -1;
   }
 
-  while (TRUE) {
-/* XXX NOTE:
- *  MHD_run_wait()
- *   * @note Available since #MHD_VERSION 0x00097206
- *
- * So, when not available, do what?  Handle poll/select ourselves?
- */
+  (void) p;
+  (void) http;
 
-    (void) MHD_run_wait(http->mhd, -1);
+  /* Just run in a loop, handling signals. */
+  while (TRUE) {
+    pr_timer_usleep(sleep_ms * 1000);
     pr_signals_handle();
   }
 
@@ -278,11 +277,15 @@ int prom_http_stop(pool *p, struct prom_http *http) {
     return -1;
   }
 
+  (void) p;
   MHD_stop_daemon(http->mhd);
+
   return 0;
 }
 
 int prom_http_init(pool *p) {
+  enum MHD_Result result;
+
   if (p == NULL) {
     errno = EINVAL;
     return -1;
@@ -290,11 +293,30 @@ int prom_http_init(pool *p) {
 
   MHD_set_panic_func(panic_cb, NULL);
 
-/* Log MHD info to PrometheusLog */
-  errno = ENOSYS;
-  return -1;
+  pr_trace_msg(trace_channel, 7, "libmicrohttpd version: %s",
+    MHD_get_version());
+
+  /* List of libmicrohttpd features in which we are interested. */
+  result = MHD_is_feature_supported(MHD_FEATURE_MESSAGES);
+  pr_trace_msg(trace_channel, 7, "  debug messages: %s",
+    result == MHD_YES ? "true" : "false");
+
+  result = MHD_is_feature_supported(MHD_FEATURE_TLS);
+  pr_trace_msg(trace_channel, 7, "  TLS support: %s",
+    result == MHD_YES ? "true" : "false");
+
+  result = MHD_is_feature_supported(MHD_FEATURE_IPv6);
+  pr_trace_msg(trace_channel, 7, "  IPv6 support: %s",
+    result == MHD_YES ? "true" : "false");
+
+  result = MHD_is_feature_supported(MHD_FEATURE_BASIC_AUTH);
+  pr_trace_msg(trace_channel, 7, "  Basic Auth support: %s",
+    result == MHD_YES ? "true" : "false");
+
+  return 0;
 }
 
 int prom_http_free(void) {
+  MHD_set_panic_func(NULL, NULL);
   return 0;
 }

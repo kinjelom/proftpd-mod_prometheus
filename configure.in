@@ -67,28 +67,6 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS(microhttpd.h sqlite3.h stdlib.h unistd.h limits.h fcntl.h sys/sysctl.h sys/sysinfo.h zlib.h)
 AC_CHECK_FUNCS(sysctl sysinfo)
 
-# Check for libmicrohttpd-isms
-AC_MSG_CHECKING([for MHD_run_wait])
-saved_libs="$LIBS"
-LIBS="-lmicrohttpd"
-AC_TRY_LINK([
-    #include <stdlib.h>
-    #include <sys/types.h>
-    #define MHD_PLATFORM_H 1
-    #ifdef HAVE_MICROHTTPD_H
-    # include <microhttpd.h>
-    #endif
-  ], [
-    (void) MHD_run_wait(NULL, 0);
-  ], [
-    AC_MSG_RESULT(yes)
-    AC_DEFINE(HAVE_MHD_RUN_WAIT, 1, [Define if you have the MHD_run_wait function])
-  ], [
-    AC_MSG_RESULT(no)
-  ]
-)
-LIBS="$saved_libs"
-
 # Check for SQLite-isms
 AC_MSG_CHECKING([for sqlite3_stmt_readonly])
 saved_libs="$LIBS"

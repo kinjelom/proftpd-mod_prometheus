@@ -921,6 +921,8 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
     }
   }
 
+  prom_http_free();
+
   if (prometheus_logfd >= 0) {
     (void) close(prometheus_logfd);
     prometheus_logfd = -1;
@@ -1013,6 +1015,11 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
     /* XXX Need to close database tables here. */
     return;
+  }
+
+  if (prom_http_init(prometheus_pool) < 0) {
+    pr_log_pri(PR_LOG_ERR, MOD_PROMETHEUS_VERSION
+      ": unable to initialize HTTP API: %s", strerror(errno));
   }
 
   exporter_port = *((unsigned short *) c->argv[0]);
