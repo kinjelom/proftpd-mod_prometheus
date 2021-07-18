@@ -219,8 +219,6 @@ static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
   register unsigned int i;
   pid_t exporter_pid;
   char *exporter_chroot = NULL;
-  rlim_t curr_nproc, max_nproc;
-  array_header *exporter_fds = NULL;
 
   exporter_pid = fork();
   switch (exporter_pid) {
@@ -419,7 +417,6 @@ static void prom_exporter_stop(pid_t exporter_pid) {
   }
 
   exporter_pid = 0;
-  return;
 }
 
 /* Configuration handlers
@@ -449,9 +446,6 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
 MODRET set_prometheusexporter(cmd_rec *cmd) {
   register unsigned int i;
   config_rec *c;
-  pr_netaddr_t *exporter_addr;
-  char *addr = NULL, *ptr;
-  size_t addrlen;
   int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
   CHECK_ARGS(cmd, 1);
@@ -460,60 +454,23 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
   /* Separate the port out from the address, if present. */
   ptr = strrchr(cmd->argv[1], ':');
   if (ptr != NULL) {
-    char *ptr2;
-
-    /* We need to handle the following possibilities:
+    /* XXX Handle provided address; deal with libmicrohttpd API for
+     * assigning/binding to specific listening address.
      *
-     *  ipv4-addr
-     *  ipv4-addr:port
-     *  [ipv6-addr]
-     *  [ipv6-addr]:port
-     *
-     * Thus we check to see if the last ':' occurs before, or after,
-     * a ']' for an IPv6 address.
+     * Handle both IPv4 and IPv6 addresses.
      */
 
-    ptr2 = strrchr(cmd->argv[i], ']');
-    if (ptr2 != NULL) {
-      if (ptr2 > ptr) {
-        /* The found ':' is part of an IPv6 address, not a port delimiter. */
-        ptr = NULL;
-      }
-    }
-
-    if (ptr != NULL) {
-      *ptr = '\0';
-
-      exporter_port = atoi(ptr + 1);
-      if (exporter_port < 1 ||
-          exporter_port > 65535) {
-        CONF_ERROR(cmd, "port must be between 1-65535");
-      }
+  } else {
+    exporter_port = atoi(cmd->argv[1]);
+    if (exporter_port < 1 ||
+        exporter_port > 65535) {
+      CONF_ERROR(cmd, "port must be between 1-65535");
     }
   }
-
-  addr = cmd->argv[1];
-  addrlen = strlen(addr);
-
-  /* Make sure we can handle an IPv6 address here, e.g.:
-   *
-   *   [::1]:9273
-   */
-  if (addrlen > 0 &&
-      (addr[0] == '[' && addr[addrlen-1] == ']')) {
-    addr = pstrndup(cmd->pool, addr + 1, addrlen - 2);
-  }
-
-  exporter_addr = pr_netaddr_get_addr(prometheus_pool, addr, NULL);
-  if (exporter_addr == NULL) {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to resolve \"", addr, "\"",
-      NULL));
-  }
-
-  pr_netaddr_set_port((pr_netaddr_t *) exporter_addr, htons(exporter_port));
 
   c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = exporter_addr;
+  c->argv[0] = pcalloc(c->pool, sizeof(int));
+  *((int *) c->argv[0]) = exporter_port;
  
   return PR_HANDLED(cmd);
 }
@@ -1015,9 +972,7 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   /* Unregister ourselves from all events. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
-  for (i = 0; prometheus_table_ids[i] > 0; i++) {
-    prom_db_close(prometheus_pool, prometheus_table_ids[i]);
-  }
+  /* XXX Need to close various database tables here. */
 
   destroy_pool(prometheus_pool);
   prometheus_pool = NULL;
@@ -1033,8 +988,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   server_rec *s;
   unsigned int nvhosts = 0;
   const char *tables_dir;
-  int res;
-  array_header *agent_addrs;
+  int exporter_port, res;
   unsigned char ban_loaded = FALSE, sftp_loaded = FALSE, tls_loaded = FALSE;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
@@ -1086,54 +1040,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   sftp_loaded = pr_module_exists("mod_sftp.c");
   ban_loaded = pr_module_exists("mod_ban.c");
 
-  for (i = 0; prometheus_table_ids[i] > 0; i++) {
-    int skip_table = FALSE;
-
-    switch (prometheus_table_ids[i]) {
-      case PROM_DB_ID_TLS:
-        if (tls_loaded == FALSE) {
-          skip_table = TRUE;
-        }
-        break;
-
-      case PROM_DB_ID_SSH:
-      case PROM_DB_ID_SFTP:
-      case PROM_DB_ID_SCP:
-        if (sftp_loaded == FALSE) {
-          skip_table = TRUE;
-        }
-        break;
-
-      case PROM_DB_ID_BAN:
-        if (ban_loaded == FALSE) {
-          skip_table = TRUE;
-        }
-        break;
-
-      default:
-        break;
-    }
-
-    if (skip_table) {
-      continue;
-    }
-
-    res = prom_db_open(prometheus_pool, prometheus_table_ids[i]);
-    if (res < 0) {
-      register unsigned int j;
-
-      /* If we fail to open this table, BUT have succeeded in opening previous
-       * tables, AND we are just going to return here, then we need to make
-       * sure to close the previously opened tables.
-       */
-      for (j = 0; prometheus_table_ids[j] > 0 && j < i; j++) {
-        (void) prom_db_close(prometheus_pool, prometheus_table_ids[j]);
-      }
-
-      prometheus_engine = FALSE;
-      return;
-    }
-  }
+  /* XXX Open various database tables */
 
   /* Iterate through the server_list, and count up the number of vhosts. */
   for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
@@ -1148,26 +1055,19 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": missing required PrometheusExporter directive, disabling module");
 
-    /* Need to close database tables here. */
-    for (i = 0; prometheus_table_ids[i] > 0; i++) {
-      (void) prom_db_close(prometheus_pool, prometheus_table_ids[i]);
-    }
-
+    /* XXX Need to close database tables here. */
     return;
   }
 
-  exporter_addr = c->argv[1];
+  exporter_port = c->argv[1];
 
-  prometheus_exporter_pid = prom_exporter_start(tables_dir, exporter_addr);
+  prometheus_exporter_pid = prom_exporter_start(tables_dir, exporter_port);
   if (prometheus_exporter_pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
 
-    /* Need to close database tables here. */
-    for (i = 0; prometheus_table_ids[i] > 0; i++) {
-      (void) prom_db_close(prometheus_pool, prometheus_table_ids[i]);
-    }
+    /* XXX Need to close database tables here. */
   }
 }
 
@@ -1196,9 +1096,7 @@ static void prom_shutdown_ev(const void *event_data, void *user_data) {
 
   prometheus_exporter_stop(prometheus_exporter_pid);
 
-  for (i = 0; prometheus_table_ids[i] > 0; i++) {
-    (void) prom_db_close(prometheus_pool, prometheus_table_ids[i]);
-  }
+  /* XXX Need to close various database tables here. */
 
   destroy_pool(prometheus_pool);
   prometheus_pool = NULL;
