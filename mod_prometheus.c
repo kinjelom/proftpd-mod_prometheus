@@ -27,8 +27,8 @@
  */
 
 #include "mod_prometheus.h"
-#include "prometheus/db.h"
-#include "prometheus/http.h"
+#include "db.h"
+#include "http.h"
 
 /* Defaults */
 #define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
