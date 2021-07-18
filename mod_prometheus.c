@@ -30,15 +30,30 @@
 #include "prometheus/db.h"
 #include "prometheus/http.h"
 
+/* Defaults */
+#define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
+
 extern xaset_t *server_list;
 
 int prometheus_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
-static pid_t prometheus_listener_pid = 0;
+static pid_t prometheus_exporter_pid = 0;
 static int prometheus_engine = FALSE;
 static unsigned long prometheus_opts = 0UL;
+static struct timeval prometheus_start_tv;
+
+/* Number of seconds to wait for the exporter process to stop before
+ * we terminate it with extreme prejudice.
+ *
+ * Currently this has a granularity of seconds; needs to be in millsecs
+ * (e.g. for 500 ms timeout).
+ */
+static time_t exporter_timeout = 1;
+
+/* Used for tracking download, upload byte totals. */
+static off_t prometheus_retr_bytes = 0, snmp_stor_bytes = 0;
 
 static const char *trace_channel = "prometheus";
 
@@ -115,14 +130,16 @@ static int prom_openlog(void) {
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusLog", FALSE);
   if (c != NULL) {
-    snmp_logname = c->argv[0];
+    const char *path;
 
-    if (strncasecmp(snmp_logname, "none", 5) != 0) {
+    path = c->argv[0];
+
+    if (strncasecmp(path, "none", 5) != 0) {
       int xerrno;
 
       pr_signals_block();
       PRIVS_ROOT
-      res = pr_log_openfile(snmp_logname, &prometheus_logfd, 0600);
+      res = pr_log_openfile(path, &prometheus_logfd, 0600);
       xerrno = errno;
       PRIVS_RELINQUISH
       pr_signals_unblock();
@@ -130,18 +147,18 @@ static int prom_openlog(void) {
       if (res < 0) {
         if (res == -1) {
           pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open SNMPLog '%s': %s", snmp_logname,
+            ": notice: unable to open PrometheusLog '%s': %s", path,
             strerror(xerrno));
 
         } else if (res == PR_LOG_WRITABLE_DIR) {
           pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open SNMPLog '%s': parent directory is "
-            "world-writable", snmp_logname);
+            ": notice: unable to open PrometheusLog '%s': parent directory is "
+            "world-writable", path);
 
         } else if (res == PR_LOG_SYMLINK) {
           pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open SNMPLog '%s': cannot log to a symlink",
-            snmp_logname);
+            ": notice: unable to open PrometheusLog '%s': cannot log to "
+            "a symlink", path);
         }
       }
     }
@@ -432,94 +449,71 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
 MODRET set_prometheusexporter(cmd_rec *cmd) {
   register unsigned int i;
   config_rec *c;
-  array_header *agent_addrs;
+  pr_netaddr_t *exporter_addr;
+  char *addr = NULL, *ptr;
+  size_t addrlen;
+  int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
-  if (cmd->argc < 2) {
-    CONF_ERROR(cmd, "wrong number of parameters");
-  }
+  CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
-  if (strncasecmp(cmd->argv[1], "master", 7) == 0) {
-    agent_type = SNMP_AGENT_TYPE_MASTER;
+  /* Separate the port out from the address, if present. */
+  ptr = strrchr(cmd->argv[1], ':');
+  if (ptr != NULL) {
+    char *ptr2;
 
-  } else if (strncasecmp(cmd->argv[1], "agentx", 7) == 0) {
-    agent_type = SNMP_AGENT_TYPE_AGENTX;
+    /* We need to handle the following possibilities:
+     *
+     *  ipv4-addr
+     *  ipv4-addr:port
+     *  [ipv6-addr]
+     *  [ipv6-addr]:port
+     *
+     * Thus we check to see if the last ':' occurs before, or after,
+     * a ']' for an IPv6 address.
+     */
 
-  } else {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unsupported SNMP agent type '",
-      cmd->argv[1], "'", NULL));
-  }
-
-  agent_addrs = make_array(prometheus_pool, 1, sizeof(pr_netaddr_t *));
-
-  for (i = 2; i < cmd->argc; i++) {
-    const pr_netaddr_t *agent_addr;
-    int agent_port = SNMP_DEFAULT_AGENT_PORT;
-    char *addr = NULL, *ptr;
-    size_t addrlen;
-
-    /* Separate the port out from the address, if present. */
-    ptr = strrchr(cmd->argv[i], ':');
+    ptr2 = strrchr(cmd->argv[i], ']');
+    if (ptr2 != NULL) {
+      if (ptr2 > ptr) {
+        /* The found ':' is part of an IPv6 address, not a port delimiter. */
+        ptr = NULL;
+      }
+    }
 
     if (ptr != NULL) {
-      char *ptr2;
+      *ptr = '\0';
 
-      /* We need to handle the following possibilities:
-       *
-       *  ipv4-addr
-       *  ipv4-addr:port
-       *  [ipv6-addr]
-       *  [ipv6-addr]:port
-       *
-       * Thus we check to see if the last ':' occurs before, or after,
-       * a ']' for an IPv6 address.
-       */
-
-      ptr2 = strrchr(cmd->argv[i], ']');
-      if (ptr2 != NULL) {
-        if (ptr2 > ptr) {
-          /* The found ':' is part of an IPv6 address, not a port delimiter. */
-          ptr = NULL;
-        }
-      }
-
-      if (ptr != NULL) {
-        *ptr = '\0';
-
-        agent_port = atoi(ptr + 1);
-        if (agent_port < 1 ||
-            agent_port > 65535) {
-          CONF_ERROR(cmd, "port must be between 1-65535");
-        }
+      exporter_port = atoi(ptr + 1);
+      if (exporter_port < 1 ||
+          exporter_port > 65535) {
+        CONF_ERROR(cmd, "port must be between 1-65535");
       }
     }
-
-    addr = cmd->argv[i];
-    addrlen = strlen(addr);
-
-    /* Make sure we can handle an IPv6 address here, e.g.:
-     *
-     *   [::1]:162
-     */
-    if (addrlen > 0 &&
-        (addr[0] == '[' && addr[addrlen-1] == ']')) {
-      addr = pstrndup(cmd->pool, addr + 1, addrlen - 2);
-    }
-
-    agent_addr = pr_netaddr_get_addr(prometheus_pool, addr, NULL);
-    if (agent_addr == NULL) {
-      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to resolve \"", addr, "\"",
-        NULL));
-    }
-
-    pr_netaddr_set_port((pr_netaddr_t *) agent_addr, htons(agent_port));
-    *((pr_netaddr_t **) push_array(agent_addrs)) = (pr_netaddr_t *) agent_addr;
   }
 
-  c = add_config_param(cmd->argv[0], 2, NULL, NULL);
-  c->argv[0] = palloc(c->pool, sizeof(int));
-  *((int *) c->argv[0]) = agent_type;
-  c->argv[1] = agent_addrs;
+  addr = cmd->argv[1];
+  addrlen = strlen(addr);
+
+  /* Make sure we can handle an IPv6 address here, e.g.:
+   *
+   *   [::1]:9273
+   */
+  if (addrlen > 0 &&
+      (addr[0] == '[' && addr[addrlen-1] == ']')) {
+    addr = pstrndup(cmd->pool, addr + 1, addrlen - 2);
+  }
+
+  exporter_addr = pr_netaddr_get_addr(prometheus_pool, addr, NULL);
+  if (exporter_addr == NULL) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to resolve \"", addr, "\"",
+      NULL));
+  }
+
+  pr_netaddr_set_port((pr_netaddr_t *) exporter_addr, htons(exporter_port));
+
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  c->argv[0] = exporter_addr;
  
   return PR_HANDLED(cmd);
 }
@@ -802,9 +796,9 @@ MODRET prom_log_stor(cmd_rec *cmd) {
    * several small files of say 999 bytes could be uploaded, and the KB
    * count would not be incremented.
    *
-   * To deal with this situation, we use the snmp_stor_bytes static variable
-   * as a "holding bucket" of bytes, from which we get the KB to add to the
-   * db tables.
+   * To deal with this situation, we use the prometheus_stor_bytes static
+   * variable as a "holding bucket" of bytes, from which we get the KB to add
+   * to the db tables.
    */
   prometheus_stor_bytes += session.xfer.total_bytes;
 
@@ -903,7 +897,6 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
         field_id = PROM_DB_FTPS_LOGINS_F_ERR_BAD_USER_TOTAL;
       }
 
-      notify_id = SNMP_NOTIFY_FTP_BAD_USER;
       notify_str = "loginFailedBadUser";
       break;
 
@@ -915,7 +908,6 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
         field_id = PROM_DB_FTPS_LOGINS_F_ERR_BAD_PASSWD_TOTAL;
       }
 
-      notify_id = SNMP_NOTIFY_FTP_BAD_PASSWD;
       notify_str = "loginFailedBadPassword";
       break;
 
@@ -1186,13 +1178,9 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
 
   ev_incr_value(PROM_DB_DAEMON_F_RESTART_COUNT, "daemon.restartCount", 1);
 
-  if (snmp_opts & PROMETHEUS_OPT_RESTART_CLEARS_COUNTERS) {
-    int res;
-
-    pr_trace_msg(trace_channel, 17,
-      "restart event received, resetting counters");
-    /* XXX */
-  }
+  pr_trace_msg(trace_channel, 17,
+    "restart event received, resetting counters");
+  /* XXX */
 
   prom_exporter_stop(prometheus_exporter_pid);
 
