@@ -517,7 +517,7 @@ int prom_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
   return 0;
 }
 
-array_header *prometheus_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
+array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
     const char *stmt, const char **errstr) {
   sqlite3_stmt *pstmt;
   int readonly = FALSE, res;
@@ -633,7 +633,7 @@ array_header *prometheus_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
 
 /* Database opening/closing. */
 
-struct prom_dbh *prometheus_db_open(pool *p, const char *table_path,
+struct prom_dbh *prom_db_open(pool *p, const char *table_path,
     const char *schema_name) {
   int res, flags;
   pool *sub_pool;
@@ -846,7 +846,7 @@ static void check_db_integrity(pool *p, struct prom_dbh *dbh, int flags) {
   }
 }
 
-struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path,
+struct prom_dbh *prom_db_open_with_version(pool *p, const char *table_path,
     const char *schema_name, unsigned int schema_version, int flags) {
   pool *tmp_pool = NULL;
   struct prom_dbh *dbh = NULL;
@@ -900,7 +900,7 @@ struct prom_dbh *prometheus_db_open_with_version(pool *p, const char *table_path
       "schema version %u < desired version %u for path '%s', deleting file",
       current_version, schema_version, table_path);
 
-    if (prometheus_db_close(p, dbh) < 0) {
+    if (prom_db_close(p, dbh) < 0) {
       pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
         ": error closing '%s' database: %s", table_path, strerror(errno));
     }

@@ -45,11 +45,11 @@ static void set_up(void) {
   }
 
   mark_point();
-  prometheus_db_init(p);
+  prom_db_init(p);
 }
 
 static void tear_down(void) {
-  prometheus_db_free();
+  prom_db_free();
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("prometheus.db", 0, 0);
