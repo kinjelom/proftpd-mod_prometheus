@@ -27,4 +27,7 @@
 
 #include "mod_prometheus.h"
 
+int prom_http_init(pool *p);
+int prom_http_free(void);
+
 #endif /* MOD_PROMETHEUS_HTTP_H */

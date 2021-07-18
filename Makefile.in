@@ -14,10 +14,14 @@ MODULE_LIBS=@MODULE_LIBS@
 MODULE_NAME=mod_prometheus
 MODULE_OBJS=mod_prometheus.o \
   http.o \
+  metric.o \
+  registry.o \
   db.o
 
 SHARED_MODULE_OBJS=mod_prometheus.lo \
   http.lo \
+  metric.lo \
+  registry.lo \
   db.lo
 
 # Necessary redefinitions

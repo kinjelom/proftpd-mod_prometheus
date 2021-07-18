@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_prometheus http implementation
- * Copyright (c) 2021 TJ Saunders
+ * ProFTPD - mod_prometheus API testsuite
+ * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,21 +22,48 @@
  * source distribution.
  */
 
-#include "mod_prometheus.h"
+/* Registry API tests. */
+
+#include "tests.h"
 #include "http.h"
 
-/* Per libmicrohttpd docs, we should define this after we have our system
- * headers, but before including `microhttpd.h`.
- */
-#define MHD_PLATFORM_H	1
-#include <microhttpd.h>
+static pool *p = NULL;
 
-int prom_http_init(pool *p) {
-  errno = ENOSYS;
-  return -1;
+static void set_up(void) {
+  if (p == NULL) {
+    p = permanent_pool = make_sub_pool(NULL);
+  }
+
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("prometheus.http", 1, 20);
+  }
+
+  mark_point();
+  prometheus_http_init(p);
 }
 
-int prom_http_free(void) {
-  errno = ENOSYS;
-  return -1;
+static void tear_down(void) {
+  prometheus_http_free();
+
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("prometheus.http", 0, 0);
+  }
+
+  if (p != NULL) {
+    destroy_pool(p);
+    p = permanent_pool = NULL;
+  }
+}
+
+Suite *tests_get_http_suite(void) {
+  Suite *suite;
+  TCase *testcase;
+
+  suite = suite_create("http");
+  testcase = tcase_create("base");
+
+  tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  suite_add_tcase(suite, testcase);
+  return suite;
 }

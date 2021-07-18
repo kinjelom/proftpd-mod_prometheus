@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_prometheus http implementation
+ * ProFTPD - mod_prometheus registry API
  * Copyright (c) 2021 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,21 +22,19 @@
  * source distribution.
  */
 
+#ifndef MOD_PROMETHEUS_REGISTRY_H
+#define MOD_PROMETHEUS_REGISTRY_H
+
 #include "mod_prometheus.h"
-#include "http.h"
+#include "metric.h"
 
-/* Per libmicrohttpd docs, we should define this after we have our system
- * headers, but before including `microhttpd.h`.
- */
-#define MHD_PLATFORM_H	1
-#include <microhttpd.h>
+/* Returns the text for all collector's metrics in the registry. */
+const char *prom_registry_get_text(pool *p);
 
-int prom_http_init(pool *p) {
-  errno = ENOSYS;
-  return -1;
-}
+/* Returns the metric object for the given metric name. */
+struct prom_metric *prom_registry_get_metric(pool *p, const char *metric_name);
 
-int prom_http_free(void) {
-  errno = ENOSYS;
-  return -1;
-}
+int prom_registry_init(pool *p);
+int prom_registry_free(void);
+
+#endif /* MOD_PROMETHEUS_REGISTRY_H */

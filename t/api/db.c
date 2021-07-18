@@ -25,6 +25,7 @@
 /* Database API tests. */
 
 #include "tests.h"
+#include "db.h"
 
 static pool *p = NULL;
 

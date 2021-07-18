@@ -28,6 +28,8 @@
 
 #include "mod_prometheus.h"
 #include "db.h"
+#include "registry.h"
+#include "metric.h"
 #include "http.h"
 
 /* Defaults */
@@ -50,10 +52,10 @@ static struct timeval prometheus_start_tv;
  * Currently this has a granularity of seconds; needs to be in millsecs
  * (e.g. for 500 ms timeout).
  */
-static time_t exporter_timeout = 1;
+static time_t prometheus_exporter_timeout = 1;
 
 /* Used for tracking download, upload byte totals. */
-static off_t prometheus_retr_bytes = 0, snmp_stor_bytes = 0;
+static off_t prometheus_retr_bytes = 0, prometheus_stor_bytes = 0;
 
 static const char *trace_channel = "prometheus";
 
@@ -216,7 +218,6 @@ static void prom_daemonize(const char *daemon_dir) {
 }
 
 static pid_t prom_exporter_start(const char *tables_dir, int exporter_port) {
-  register unsigned int i;
   pid_t exporter_pid;
   char *exporter_chroot = NULL;
 
@@ -326,7 +327,7 @@ static void prom_exporter_stop(pid_t exporter_pid) {
   }
 
   pr_trace_msg(trace_channel, 3, "stopping exporter PID %lu",
-    (unsigned long) agent_pid);
+    (unsigned long) exporter_pid);
 
   /* Litmus test: is the exporter process still around?  If not, there's
    * nothing for us to do.
@@ -376,11 +377,11 @@ static void prom_exporter_stop(pid_t exporter_pid) {
     }
 
     /* Check the time elapsed since we started. */
-    if ((time(NULL) - start_time) > exporter_timeout) {
+    if ((time(NULL) - start_time) > prometheus_exporter_timeout) {
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "exporter process ID %lu took longer than timeout (%lu secs) to "
         "stop, sending SIGKILL (signal %d)", (unsigned long) exporter_pid,
-        exporter_timeout, SIGKILL);
+        prometheus_exporter_timeout, SIGKILL);
       res = kill(exporter_pid, SIGKILL);
       if (res < 0) {
         (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -444,7 +445,7 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
 
 /* usage: PrometheusExporter [address:]port */
 MODRET set_prometheusexporter(cmd_rec *cmd) {
-  register unsigned int i;
+  char *ptr;
   config_rec *c;
   int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
@@ -606,7 +607,6 @@ MODRET set_prometheustables(cmd_rec *cmd) {
 
 MODRET prom_pre_list(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -618,7 +618,6 @@ MODRET prom_pre_list(cmd_rec *cmd) {
 
 MODRET prom_log_list(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -630,7 +629,6 @@ MODRET prom_log_list(cmd_rec *cmd) {
 
 MODRET prom_err_list(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -642,7 +640,6 @@ MODRET prom_err_list(cmd_rec *cmd) {
 
 MODRET prom_log_pass(cmd_rec *cmd) {
   const char *proto; 
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -654,7 +651,6 @@ MODRET prom_log_pass(cmd_rec *cmd) {
 
 MODRET prom_err_pass(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -666,7 +662,6 @@ MODRET prom_err_pass(cmd_rec *cmd) {
 
 MODRET prom_pre_retr(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -680,7 +675,6 @@ MODRET prom_log_retr(cmd_rec *cmd) {
   const char *proto;
   uint32_t retr_kb;
   off_t rem_bytes;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -711,7 +705,6 @@ MODRET prom_log_retr(cmd_rec *cmd) {
 
 MODRET prom_err_retr(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -723,7 +716,6 @@ MODRET prom_err_retr(cmd_rec *cmd) {
 
 MODRET prom_pre_stor(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -737,7 +729,6 @@ MODRET prom_log_stor(cmd_rec *cmd) {
   const char *proto;
   uint32_t stor_kb;
   off_t rem_bytes;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -768,7 +759,6 @@ MODRET prom_log_stor(cmd_rec *cmd) {
 
 MODRET prom_err_stor(cmd_rec *cmd) {
   const char *proto;
-  int res;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -786,8 +776,8 @@ MODRET prom_log_auth(cmd_rec *cmd) {
   }
 
   /* Note: we are not currently properly incrementing
-   * PROM_DB_FTPS_SESS_F_SESS_COUNT and PROM_DB_FTPS_SESS_F_SESS_TOTAL
-   * for FTPS connections accepted using the UseImplicitSSL TLSOption.
+   * session_count/session_total{protocol="ftps"} for FTPS connections
+   * accepted using the UseImplicitSSL TLSOption.
    *
    * The issue is that for those connections, the protocol will be set to
    * "ftps" in mod_tls' sess_init callback.  But here in mod_prometheus, we
@@ -803,28 +793,38 @@ MODRET prom_log_auth(cmd_rec *cmd) {
 /* Event listeners
  */
 
-static void ev_incr_value(unsigned int field_id, const char *field_str,
-    int32_t incr) {
+static void ev_incr_value(const char *metric_name, int32_t incr,
+    pr_table_t *labels) {
   int res;
   pool *p;
+  struct prom_metric *metric;
 
   p = session.pool;
   if (p == NULL) {
     p = prometheus_pool;
   }
- 
-  res = prom_db_incr_value(p, field_id, incr);
+
+  metric = prom_registry_get_metric(p, metric_name);
+  if (metric == NULL) {
+    pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
+      metric_name);
+    return;
+  }
+
+/* XXX need to add protocol label, others */
+  res = prom_metric_incr_value(p, metric, incr, labels);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
-      "error %s prometheus database for %s: %s",
-      incr < 0 ? "decrementing" : "incrementing", field_str, strerror(errno));
+      "error %s %s: %s",
+      incr < 0 ? "decrementing" : "incrementing", metric_name,
+      strerror(errno));
   }
 }
 
 static void prom_auth_code_ev(const void *event_data, void *user_data) {
-  int auth_code, res;
-  unsigned int field_id = PROM_DB_ID_UNKNOWN, is_ftps = FALSE, notify_id = 0;
-  const char *notify_str = NULL, *proto;
+  int auth_code;
+  const char *metric_name = NULL;
+  pr_table_t *labels = NULL;
 
   if (prometheus_engine == FALSE) {
     return;
@@ -832,92 +832,65 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
 
   auth_code = *((int *) event_data);
 
-  /* Any notifications we generate here may depend on the protocol in use. */
-  proto = pr_session_get_protocol(0);
-
-  if (strcmp(proto, "ftps") == 0) {
-    is_ftps = TRUE;
-  }
-
   switch (auth_code) {
     case PR_AUTH_RFC2228_OK:
-      if (is_ftps == TRUE) {
-        field_id = PROM_DB_FTPS_LOGINS_F_CERT_TOTAL;
-      }
+      metric_name = "login_total";
+      /* pr_table_add(labels, "method", "certificate") */
+      break;
+
+    case PR_AUTH_OK:
+      metric_name = "login_total";
       break;
 
     case PR_AUTH_NOPWD:
-      if (is_ftps == FALSE) {
-        field_id = PROM_DB_FTP_LOGINS_F_ERR_BAD_USER_TOTAL;
-
-      } else {
-        field_id = PROM_DB_FTPS_LOGINS_F_ERR_BAD_USER_TOTAL;
-      }
-
-      notify_str = "loginFailedBadUser";
+      metric_name = "login_err_total";
+      /* pr_table_add(labels, "reason", "unknown user") */
       break;
 
     case PR_AUTH_BADPWD:
-      if (is_ftps == FALSE) {
-        field_id = PROM_DB_FTP_LOGINS_F_ERR_BAD_PASSWD_TOTAL;
-
-      } else {
-        field_id = PROM_DB_FTPS_LOGINS_F_ERR_BAD_PASSWD_TOTAL;
-      }
-
-      notify_str = "loginFailedBadPassword";
+      metric_name = "login_err_total";
+      /* pr_table_add(labels, "reason", "bad password") */
       break;
 
     default:
-      if (is_ftps == FALSE) {
-        field_id = PROM_DB_FTP_LOGINS_F_ERR_GENERAL_TOTAL;
-
-      } else {
-        field_id = PROM_DB_FTPS_LOGINS_F_ERR_GENERAL_TOTAL;
-      }
-
+      metric_name = "login_err_total";
       break;
   }
  
-  if (auth_code >= 0) {
-    ev_incr_value(field_id, "login total", 1); 
-
-    /* We only send notifications for failed authentications. */
-    return;
-
-  } else {
-    ev_incr_value(field_id, "login failure total", 1); 
-  }
+  ev_incr_value(metric_name, 1, labels); 
 }
 
 static void prom_cmd_invalid_ev(const void *event_data, void *user_data) {
+  const char *metric_name;
+
   if (prometheus_engine == FALSE) {
     return;
   }
-  
-  ev_incr_value(PROM_DB_FTP_SESS_F_CMD_INVALID_TOTAL,
-    "ftp.connections.commandInvalidTotal", 1);
+
+  metric_name = "invalid_command_total";  
+  ev_incr_value(metric_name, 1, NULL);
 }
 
 static void prom_exit_ev(const void *event_data, void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_DAEMON_F_CONN_COUNT, "daemon.connectionCount", -1);
+  ev_incr_value("connection_count", -1, NULL);
 
   switch (session.disconnect_reason) {
     case PR_SESS_DISCONNECT_BANNED:
     case PR_SESS_DISCONNECT_CONFIG_ACL:
     case PR_SESS_DISCONNECT_MODULE_ACL:
     case PR_SESS_DISCONNECT_SESSION_INIT_FAILED:
-      ev_incr_value(PROM_DB_DAEMON_F_CONN_REFUSED_TOTAL,
-        "daemon.connectionRefusedTotal", 1);
+      /* XXX Add labels for refusal reason? */
+      ev_incr_value("connection_refused_total", 1, NULL);
       break;
 
     case PR_SESS_DISCONNECT_SEGFAULT:
-      ev_incr_value(PROM_DB_DAEMON_F_SEGFAULT_COUNT,
-        "daemon.segfaultCount", 1);
+      ev_incr_value("segfault_total", 1, NULL);
       break;
 
     default: {
@@ -925,21 +898,13 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
 
       proto = pr_session_get_protocol(0);
 
-      if (strcmp(proto, "ftp") == 0) {
-        ev_incr_value(PROM_DB_FTP_SESS_F_SESS_COUNT,
-          "ftp.sessions.sessionCount", -1);
+      ev_incr_value("session_count", -1, NULL);
+      ev_incr_value("session_total", 1, NULL);
 
-        if (session.anon_config != NULL) {
-          ev_incr_value(PROM_DB_FTP_LOGINS_F_ANON_COUNT,
-            "ftp.logins.anonLoginCount", -1);
-        }
-
-      } else if (strcmp(proto, "ftps") == 0) {
-        ev_incr_value(PROM_DB_FTPS_SESS_F_SESS_COUNT,
-          "ftps.tlsSessions.sessionCount", -1);
-
-      } else {
-        /* XXX ssh2/sftp/scp session end */
+      if (strcmp(proto, "ftp") == 0 &&
+          session.anon_config != NULL) {
+        /* XXX pr_table_add(labels, "method", "anonymous") */
+        ev_incr_value("login_count", -1, labels);
       }
 
       break;
@@ -950,15 +915,6 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
     (void) close(prometheus_logfd);
     prometheus_logfd = -1;
   }
-}
-
-static void prom_max_inst_ev(const void *event_data, void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  ev_incr_value(PROM_DB_DAEMON_F_MAXINST_TOTAL,
-    "daemon.maxInstancesLimitTotal", 1);
 }
 
 #if defined(PR_SHARED_MODULE)
@@ -983,13 +939,9 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 #endif /* PR_SHARED_MODULE */
 
 static void prom_postparse_ev(const void *event_data, void *user_data) {
-  register unsigned int i;
   config_rec *c;
-  server_rec *s;
-  unsigned int nvhosts = 0;
   const char *tables_dir;
-  int exporter_port, res;
-  unsigned char ban_loaded = FALSE, sftp_loaded = FALSE, tls_loaded = FALSE;
+  int exporter_port, sftp_loaded = FALSE, tls_loaded = FALSE;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
   if (c != NULL) {
@@ -1026,28 +978,22 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
   tables_dir = c->argv[0];
 
+#if TJ
   if (prom_db_set_root(tables_dir) < 0) {
     /* Unable to configure the PrometheusTables root for some reason... */
 
     prometheus_engine = FALSE;
     return;
   }
+#endif
 
   /* Create the variable database table files, based on the configured
    * PrometheusTables path.
    */
   tls_loaded = pr_module_exists("mod_tls.c");
   sftp_loaded = pr_module_exists("mod_sftp.c");
-  ban_loaded = pr_module_exists("mod_ban.c");
 
   /* XXX Open various database tables */
-
-  /* Iterate through the server_list, and count up the number of vhosts. */
-  for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
-    nvhosts++;
-  }
-
-  ev_incr_value(PROM_DB_DAEMON_F_VHOST_COUNT, "daemon.vhostCount", nvhosts);
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusExporter", FALSE);
   if (c == NULL) {
@@ -1059,7 +1005,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  exporter_port = c->argv[1];
+  exporter_port = *((int *) c->argv[0]);
 
   prometheus_exporter_pid = prom_exporter_start(tables_dir, exporter_port);
   if (prometheus_exporter_pid == 0) {
@@ -1076,8 +1022,6 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  ev_incr_value(PROM_DB_DAEMON_F_RESTART_COUNT, "daemon.restartCount", 1);
-
   pr_trace_msg(trace_channel, 17,
     "restart event received, resetting counters");
   /* XXX */
@@ -1092,9 +1036,7 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
 }
 
 static void prom_shutdown_ev(const void *event_data, void *user_data) {
-  register unsigned int i;
-
-  prometheus_exporter_stop(prometheus_exporter_pid);
+  prom_exporter_stop(prometheus_exporter_pid);
 
   /* XXX Need to close various database tables here. */
 
@@ -1117,83 +1059,77 @@ static void prom_startup_ev(const void *event_data, void *user_data) {
     return;
   }
 
+/* XXX Add build_info metric, start_timestamp */
   gettimeofday(&prometheus_start_tv, NULL);
 }
 
 static void prom_timeout_idle_ev(const void *event_data, void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_TIMEOUTS_F_IDLE_TOTAL,
-    "timeouts.idleTimeoutTotal", 1);
+/* XXX pr_table_add(labels, "reason", "idle") */
+  ev_incr_value("timeout_total", 1, labels);
 }
 
 static void prom_timeout_login_ev(const void *event_data, void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_TIMEOUTS_F_LOGIN_TOTAL,
-    "timeouts.loginTimeoutTotal", 1);
+/* XXX pr_table_add(labels, "reason", "login") */
+  ev_incr_value("timeout_total", 1, labels);
 }
 
 static void prom_timeout_noxfer_ev(const void *event_data, void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_TIMEOUTS_F_NOXFER_TOTAL,
-    "timeouts.noTransferTimeoutTotal", 1);
+/* XXX pr_table_add(labels, "reason", "notransfer") */
+  ev_incr_value("timeout_total", 1, labels);
 }
 
 static void prom_timeout_stalled_ev(const void *event_data, void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_TIMEOUTS_F_STALLED_TOTAL,
-    "timeouts.stalledTimeoutTotal", 1);
+/* XXX pr_table_add(labels, "reason", "stalled") */
+  ev_incr_value("timeout_total", 1, labels);
 }
 
 /* mod_tls-generated events */
 static void prom_tls_ctrl_handshake_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
-  
-  ev_incr_value(PROM_DB_FTPS_SESS_F_CTRL_HANDSHAKE_ERR_TOTAL,
-    "ftps.tlsSessions.ctrlHandshakeFailedTotal", 1);
+
+/* XXX pr_table_add(labels, "connection", "ctrl") */
+  ev_incr_value("handshake_error_total", 1, labels);
 }
 
 static void prom_tls_data_handshake_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
   
-  ev_incr_value(PROM_DB_FTPS_SESS_F_DATA_HANDSHAKE_ERR_TOTAL,
-    "ftps.tlsSessions.dataHandshakeFailedTotal", 1);
-}
-
-static void prom_tls_verify_client_ev(const void *event_data, void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  } 
-
-  ev_incr_value(PROM_DB_FTPS_SESS_F_VERIFY_CLIENT_TOTAL,
-    "ftps.tlsSessions.verifyClientTotal", 1);
-}
-
-static void prom_tls_verify_client_err_ev(const void *event_data,
-    void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  ev_incr_value(PROM_DB_FTPS_SESS_F_VERIFY_CLIENT_ERR_TOTAL,
-    "ftps.tlsSessions.verifyClientFailedTotal", 1);
+/* XXX pr_table_add(labels, "connection", "data") */
+  ev_incr_value("handshake_error_total", 1, labels);
 }
 
 /* mod_sftp-generated events */
@@ -1202,113 +1138,113 @@ static void prom_ssh2_kex_err_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_SESS_F_KEX_ERR_TOTAL,
-    "ssh.sshSessions.keyExchangeFailedTotal", 1);
-}
-
-static void prom_ssh2_c2s_compress_ev(const void *event_data, void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  ev_incr_value(PROM_DB_SSH_SESS_F_C2S_COMPRESS_TOTAL,
-    "ssh.sshSessions.clientCompressionTotal", 1);
-}
-
-static void prom_ssh2_s2c_compress_ev(const void *event_data, void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  ev_incr_value(PROM_DB_SSH_SESS_F_S2C_COMPRESS_TOTAL,
-    "ssh.sshSessions.serverCompressionTotal", 1);
+  ev_incr_value("handshake_error_total", 1, NULL);
 }
 
 static void prom_ssh2_auth_hostbased_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_HOSTBASED_TOTAL,
-    "ssh.sshLogins.hostbasedAuthTotal", 1);
+/* XXX pr_table_add(labels, "method", "hostbased") */
+  ev_incr_value("login_count", 1, labels);
+  ev_incr_value("login_total", 1, labels);
 }
 
 static void prom_ssh2_auth_hostbased_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_HOSTBASED_ERR_TOTAL,
-    "ssh.sshLogins.hostbasedAuthFailedTotal", 1);
+/* XXX pr_table_add(labels, "method", "hostbased") */
+  ev_incr_value("login_error_total", 1, labels);
 }
 
 static void prom_ssh2_auth_kbdint_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_KBDINT_TOTAL,
-    "ssh.sshLogins.keyboardInteractiveAuthTotal", 1);
+/* XXX pr_table_add(labels, "method", "keyboard-interactive") */
+  ev_incr_value("login_count", 1, labels);
+  ev_incr_value("login_total", 1, labels);
 }
 
 static void prom_ssh2_auth_kbdint_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_KBDINT_ERR_TOTAL,
-    "ssh.sshLogins.keyboardInteractiveAuthFailedTotal", 1);
+/* XXX pr_table_add(labels, "method", "keyboard-interactive") */
+  ev_incr_value("login_error_total", 1, labels);
 }
 
 static void prom_ssh2_auth_passwd_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_PASSWD_TOTAL,
-    "ssh.sshLogins.passwordAuthTotal", 1);
+/* XXX pr_table_add(labels, "method", "password") */
+  ev_incr_value("login_count", 1, labels);
+  ev_incr_value("login_total", 1, labels);
 }
 
 static void prom_ssh2_auth_passwd_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_PASSWD_ERR_TOTAL,
-    "ssh.sshLogins.passwordAuthFailedTotal", 1);
+/* XXX pr_table_add(labels, "method", "password") */
+  ev_incr_value("login_error_total", 1, labels);
 }
 
 static void prom_ssh2_auth_publickey_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_PUBLICKEY_TOTAL,
-    "ssh.sshLogins.publickeyAuthTotal", 1);
+/* XXX pr_table_add(labels, "method", "publickey") */
+  ev_incr_value("login_count", 1, labels);
+  ev_incr_value("login_total", 1, labels);
 }
 
 static void prom_ssh2_auth_publickey_err_ev(const void *event_data,
     void *user_data) {
+  pr_table_t *labels = NULL;
+
   if (prometheus_engine == FALSE) {
     return;
   }
 
-  ev_incr_value(PROM_DB_SSH_LOGINS_F_PUBLICKEY_ERR_TOTAL,
-    "ssh.sshLogins.publickeyAuthFailedTotal", 1);
+/* XXX pr_table_add(labels, "method", "publickey") */
+  ev_incr_value("login_error_total", 1, labels);
 }
 
 static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
     void *user_data) {
   unsigned long protocol_version;
-  unsigned int field_id;
-  const char *field_str;
+  pr_table_t *labels = NULL;
 
   if (prometheus_engine == FALSE) {
     return;
@@ -1323,23 +1259,19 @@ static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
 
   switch (protocol_version) {
     case 3:
-      field_id = PROM_DB_SFTP_SESS_F_SFTP_V3_TOTAL;
-      field_str = "sftp.sftpSessions.protocolVersion3Total";
+      /* XXX pr_table_add(labels, "version", "3") */
       break;
 
     case 4:
-      field_id = PROM_DB_SFTP_SESS_F_SFTP_V4_TOTAL;
-      field_str = "sftp.sftpSessions.protocolVersion4Total";
+      /* XXX pr_table_add(labels, "version", "4") */
       break;
 
     case 5:
-      field_id = PROM_DB_SFTP_SESS_F_SFTP_V5_TOTAL;
-      field_str = "sftp.sftpSessions.protocolVersion5Total";
+      /* XXX pr_table_add(labels, "version", "5") */
       break;
 
     case 6:
-      field_id = PROM_DB_SFTP_SESS_F_SFTP_V6_TOTAL;
-      field_str = "sftp.sftpSessions.protocolVersion6Total";
+      /* XXX pr_table_add(labels, "version", "6") */
       break;
 
     default:
@@ -1348,7 +1280,7 @@ static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
       return;
   }
 
-  ev_incr_value(field_id, field_str, 1);
+  ev_incr_value("sftp_protocol_total", 1, labels);
 }
 
 static void prom_ssh2_sftp_sess_opened_ev(const void *event_data,
@@ -1357,10 +1289,8 @@ static void prom_ssh2_sftp_sess_opened_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value(PROM_DB_SFTP_SESS_F_SESS_COUNT,
-    "sftp.sftpSessions.sessionCount", 1);
-  ev_incr_value(PROM_DB_SFTP_SESS_F_SESS_TOTAL,
-    "sftp.sftpSessions.sessionTotal", 1);
+  ev_incr_value("session_count", 1, NULL);
+  ev_incr_value("session_total", 1, NULL);
 }
 
 static void prom_ssh2_sftp_sess_closed_ev(const void *event_data,
@@ -1369,8 +1299,7 @@ static void prom_ssh2_sftp_sess_closed_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value(PROM_DB_SFTP_SESS_F_SESS_COUNT,
-    "sftp.sftpSessions.sessionCount", -1);
+  ev_incr_value("session_count", -1, NULL);
 }
 
 static void prom_ssh2_scp_sess_opened_ev(const void *event_data,
@@ -1379,10 +1308,8 @@ static void prom_ssh2_scp_sess_opened_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value(PROM_DB_SCP_SESS_F_SESS_COUNT,
-    "scp.scpSessions.sessionCount", 1);
-  ev_incr_value(PROM_DB_SCP_SESS_F_SESS_TOTAL,
-    "scp.scpSessions.sessionTotal", 1);
+  ev_incr_value("session_count", 1, NULL);
+  ev_incr_value("session_total", 1, NULL);
 }
 
 static void prom_ssh2_scp_sess_closed_ev(const void *event_data,
@@ -1391,110 +1318,16 @@ static void prom_ssh2_scp_sess_closed_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value(PROM_DB_SCP_SESS_F_SESS_COUNT,
-    "scp.scpSessions.sessionCount", -1);
-}
-
-/* mod_ban-generated events */
-static void prom_ban_ban_user_ev(const void *event_data, void *user_data) {
-  ev_incr_value(PROM_DB_BAN_BANS_F_USER_BAN_COUNT, "ban.bans.userBanCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_USER_BAN_TOTAL, "ban.bans.userBanTotal", 1);
-
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_COUNT, "ban.bans.banCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_TOTAL, "ban.bans.banTotal", 1);
-}
-
-static void prom_ban_ban_host_ev(const void *event_data, void *user_data) {
-  ev_incr_value(PROM_DB_BAN_BANS_F_HOST_BAN_COUNT, "ban.bans.hostBanCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_HOST_BAN_TOTAL, "ban.bans.hostBanTotal", 1);
-
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_COUNT, "ban.bans.banCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_TOTAL, "ban.bans.banTotal", 1);
-}
-
-static void prom_ban_ban_class_ev(const void *event_data, void *user_data) {
-  ev_incr_value(PROM_DB_BAN_BANS_F_CLASS_BAN_COUNT,
-    "ban.bans.classBanCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_CLASS_BAN_TOTAL,
-    "ban.bans.classBanTotal", 1);
-
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_COUNT, "ban.bans.banCount", 1);
-  ev_incr_value(PROM_DB_BAN_BANS_F_BAN_TOTAL, "ban.bans.banTotal", 1);
-}
-
-static void prom_ban_expired_ban_ev(const void *event_data, void *user_data) {
-  const char *ban_desc = NULL;
-
-  if (event_data != NULL) {
-    char *ptr = NULL;
-
-    ban_desc = (const char *) event_data;
-
-    ptr = strchr(ban_desc, ':');
-    if (ptr != NULL) {
-      /* To get the specific ban criteria/name later, use ptr + 1. */
-
-      if (strncmp(ban_desc, "USER", 4) == 0) {
-        ev_incr_value(PROM_DB_BAN_BANS_F_USER_BAN_COUNT,
-          "ban.bans.userBanCount", -1);
-
-      } else if (strncmp(ban_desc, "HOST", 4) == 0) {
-        ev_incr_value(PROM_DB_BAN_BANS_F_HOST_BAN_COUNT,
-          "ban.bans.hostBanCount", -1);
-
-      } else if (strncmp(ban_desc, "CLASS", 5) == 0) {
-        ev_incr_value(PROM_DB_BAN_BANS_F_CLASS_BAN_COUNT,
-          "ban.bans.classBanCount", -1);
-      }
-
-      ev_incr_value(PROM_DB_BAN_BANS_F_BAN_COUNT, "ban.bans.banCount", -1);
-    }
-  }
-}
-
-static void prom_ban_client_disconn_ev(const void *event_data,
-    void *user_data) {
-  const char *ban_desc = NULL;
-
-  if (event_data != NULL) {
-    char *ptr = NULL;
-
-    ban_desc = (const char *) event_data;
-
-    ptr = strchr(ban_desc, ':');
-    if (ptr != NULL) {
-      /* To get the specific ban criteria/name later, use ptr + 1. */
-
-      if (strncmp(ban_desc, "USER", 4) == 0) {
-        ev_incr_value(PROM_DB_BAN_CONNS_F_USER_BAN_TOTAL,
-          "ban.connections.userBannedTotal", 1);
-
-      } else if (strncmp(ban_desc, "HOST", 4) == 0) {
-        ev_incr_value(PROM_DB_BAN_CONNS_F_HOST_BAN_TOTAL,
-          "ban.connections.hostBannedTotal", 1);
-
-      } else if (strncmp(ban_desc, "CLASS", 5) == 0) {
-        ev_incr_value(PROM_DB_BAN_CONNS_F_CLASS_BAN_TOTAL,
-          "ban.connections.classBannedTotal", 1);
-      }
-
-      ev_incr_value(PROM_DB_BAN_CONNS_F_CONN_BAN_TOTAL,
-        "ban.connections.connectionBannedTotal", 1);
-    }
-  }
+  ev_incr_value("session_count", -1, NULL);
 }
 
 /* Initialization routines
  */
 
 static int prom_init(void) {
-  struct protoent *pre = NULL;
-
   prometheus_pool = make_sub_pool(permanent_pool);
   pr_pool_tag(prometheus_pool, MOD_PROMETHEUS_VERSION);
 
-  pr_event_register(&prometheus_module, "core.max-instances",
-    prom_max_inst_ev, NULL);
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&prometheus_module, "core.module-unload",
     prom_mod_unload_ev, NULL);
@@ -1519,18 +1352,10 @@ static int prom_init(void) {
    */
   pr_event_register(&prometheus_module, "core.exit", prom_exit_ev, NULL);
 
-#ifdef HAVE_RANDOM
-  /* Seed the random(3) generator. */ 
-  srandom((unsigned int) (time(NULL) * getpid())); 
-#endif /* HAVE_RANDOM */
-
   return 0;
 }
 
-static int prometheus_sess_init(void) {
-  config_rec *c;
-  int res;
-
+static int prom_sess_init(void) {
   pr_event_register(&prometheus_module, "core.invalid-command",
     prom_cmd_invalid_ev, NULL);
   pr_event_register(&prometheus_module, "core.timeout-idle",
@@ -1553,11 +1378,6 @@ static int prometheus_sess_init(void) {
       prom_tls_ctrl_handshake_err_ev, NULL);
     pr_event_register(&prometheus_module, "mod_tls.data-handshake-failed",
       prom_tls_data_handshake_err_ev, NULL);
-
-    pr_event_register(&prometheus_module, "mod_tls.verify-client",
-      prom_tls_verify_client_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_tls.verify-client-failed",
-      prom_tls_verify_client_err_ev, NULL);
   }
 
   if (pr_module_exists("mod_sftp.c") == TRUE) {
@@ -1565,10 +1385,6 @@ static int prometheus_sess_init(void) {
 
     pr_event_register(&prometheus_module, "mod_sftp.ssh2.kex.failed",
       prom_ssh2_kex_err_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_sftp.ssh2.client-compression",
-      prom_ssh2_c2s_compress_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_sftp.ssh2.server-compression",
-      prom_ssh2_s2c_compress_ev, NULL);
 
     pr_event_register(&prometheus_module, "mod_sftp.ssh2.auth-hostbased",
       prom_ssh2_auth_hostbased_ev, NULL);
@@ -1603,37 +1419,7 @@ static int prometheus_sess_init(void) {
       prom_ssh2_scp_sess_closed_ev, NULL);
   }
 
-  if (pr_module_exists("mod_ban.c") == TRUE) {
-    /* mod_ban events */
-
-    pr_event_register(&prometheus_module, "mod_ban.ban-user",
-      prom_ban_ban_user_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_ban.ban-host",
-      prom_ban_ban_host_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_ban.ban-class",
-      prom_ban_ban_class_ev, NULL);
-
-    /* Note: For these event listeners to work as expected, the mod_prometheus
-     * module needs to be loaded AFTER mod_ban, i.e.:
-     *
-     *   --with-modules=....:mod_ban:mod_prometheus:...
-     *
-     * or:
-     *
-     *  LoadModule mod_ban.c
-     *  ...
-     *  LoadModule mod_prometheus.c
-     *
-     * That we, we can have our event listeners registered by the time that
-     * mod_ban's sess_init callback causes events to be generated for an
-     * incoming connection (including ban expiration).
-     */
-    pr_event_register(&prometheus_module, "mod_ban.ban.expired",
-      prom_ban_expired_ban_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_ban.ban.client-disconnected",
-      prom_ban_client_disconn_ev, NULL);
-  }
-
+#if TJ
   res = prom_db_incr_value(session.pool, PROM_DB_DAEMON_F_CONN_COUNT, 1);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -1647,6 +1433,7 @@ static int prometheus_sess_init(void) {
       "error incrementing daemon.connectionTotal: %s",
       strerror(errno));
   }
+#endif
 
   return 0;
 }
@@ -1656,6 +1443,7 @@ static int prometheus_sess_init(void) {
 
 static conftable prometheus_conftab[] = {
   { "PrometheusEngine",		set_prometheusengine,		NULL },
+  { "PrometheusExporter",	set_prometheusexporter,		NULL },
   { "PrometheusLog",		set_prometheuslog,		NULL },
   { "PrometheusOptions",	set_prometheusoptions,		NULL },
   { "PrometheusTables",		set_prometheustables,		NULL },
@@ -1712,10 +1500,10 @@ module prometheus_module = {
   NULL,
 
   /* Module initialization */
-  prometheus_init,
+  prom_init,
 
   /* Session initialization */
-  prometheus_sess_init,
+  prom_sess_init,
 
   /* Module version */
   MOD_PROMETHEUS_VERSION

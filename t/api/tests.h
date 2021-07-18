@@ -29,8 +29,6 @@
 
 #include "mod_prometheus.h"
 
-#include "db.h"
-
 #ifdef HAVE_CHECK_H
 # include <check.h>
 #else
@@ -40,6 +38,9 @@
 int tests_rmpath(pool *p, const char *path);
 
 Suite *tests_get_db_suite(void);
+Suite *tests_get_metric_suite(void);
+Suite *tests_get_registry_suite(void);
+Suite *tests_get_http_suite(void);
 
 extern volatile unsigned int recvd_signal_flags;
 extern pid_t mpid;

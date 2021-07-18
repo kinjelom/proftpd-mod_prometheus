@@ -31,6 +31,9 @@ struct testsuite_info {
 
 static struct testsuite_info suites[] = {
   { "db",		tests_get_db_suite },
+  { "metric",		tests_get_metric_suite },
+  { "registry",		tests_get_registry_suite },
+  { "http",		tests_get_http_suite },
 
   { NULL, NULL }
 };
@@ -66,7 +69,7 @@ int main(int argc, char *argv[]) {
     Suite *suite;
 
     suite = tests_get_suite(requested);
-    if (suite) {
+    if (suite != NULL) {
       srunner_add_suite(runner, suite);
 
     } else {
@@ -83,7 +86,7 @@ int main(int argc, char *argv[]) {
       Suite *suite;
 
       suite = (suites[i].get_suite)();
-      if (suite) {
+      if (suite != NULL) {
         srunner_add_suite(runner, suite);
       }
     }
@@ -93,7 +96,7 @@ int main(int argc, char *argv[]) {
   pr_trace_use_stderr(TRUE);
 
   requested = getenv("PROMETHEUS_TEST_NOFORK");
-  if (requested) {
+  if (requested != NULL) {
     srunner_set_fork_status(runner, CK_NOFORK);
 
   } else {
