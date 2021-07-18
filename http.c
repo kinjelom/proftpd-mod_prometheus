@@ -31,6 +31,22 @@
 #define MHD_PLATFORM_H	1
 #include <microhttpd.h>
 
+#if MHD_VERSION < 0x00097002
+/* Prior to this change, the library used only `int`, not `enum MHD_Result`.
+ * So to avoid compiler warnings for older library versions (such as those
+ * provided by Centos), we need to jump through preprocessor hoops.
+ */
+# undef MHD_YES
+# undef MHD_NO
+enum MHD_Result {
+  /* MHD result code for "NO". */
+  MHD_NO = 0,
+
+  /* MHD result code for "YES". */
+  MHD_YES = 1
+};
+#endif
+
 static const char *trace_channel = "prometheus.http";
 static const char *clf_channel = "prometheus.http.clf";
 
@@ -60,16 +76,22 @@ static const char *get_ip_text(pool *p, const struct sockaddr *sa) {
   remote_ip = pcalloc(p, remote_iplen);
 
   switch (sa->sa_family) {
-    case AF_INET:
-      pr_inet_ntop(AF_INET, &(((struct sockaddr_in *) sa)->sin_addr),
-        remote_ip, remote_iplen - 1);
+    case AF_INET: {
+      struct sockaddr_in *sin;
+
+      sin = (struct sockaddr_in *) sa;
+      pr_inet_ntop(AF_INET, &(sin->sin_addr), remote_ip, remote_iplen - 1);
       break;
+    }
 
 #if defined(PR_USE_IPV6)
-    case AF_INET6:
-      pr_inet_ntop(AF_INET6, &(((struct sockaddr_in6 *) sa)->sin6_addr),
-        remote_ip, remote_iplen - 1);
+    case AF_INET6: {
+      struct sockaddr_in6 *sin6;
+
+      sin6 = (struct sockaddr_in6 *) sa;
+      pr_inet_ntop(AF_INET6, &(sin6->sin6_addr), remote_ip, remote_iplen - 1);
       break;
+    }
 #endif /* PR_USE_IPV6 */
 
     default:
