@@ -950,7 +950,7 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
 
-  prometheus_export_http = NULL;
+  prometheus_exporter_http = NULL;
   prometheus_registry = NULL;
   prometheus_tables_dir = NULL;
 }
