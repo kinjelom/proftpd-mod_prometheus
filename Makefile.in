@@ -23,7 +23,7 @@ SHARED_MODULE_OBJS=mod_prometheus.lo \
   lib/prometheus/db.lo \
   lib/prometheus/http.lo \
   lib/prometheus/metric.lo \
-  lib/prometheus/metric/db.o \
+  lib/prometheus/metric/db.lo \
   lib/prometheus/registry.lo
 
 # Necessary redefinitions
