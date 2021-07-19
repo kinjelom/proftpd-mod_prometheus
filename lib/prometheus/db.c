@@ -23,7 +23,7 @@
  */
 
 #include "mod_prometheus.h"
-#include "db.h"
+#include "prometheus/db.h"
 
 #include <sqlite3.h>
 

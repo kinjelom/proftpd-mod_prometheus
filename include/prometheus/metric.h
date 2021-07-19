@@ -26,7 +26,7 @@
 #define MOD_PROMETHEUS_METRIC_H
 
 #include "mod_prometheus.h"
-#include "registry.h"
+#include "prometheus/registry.h"
 
 struct prom_metric;
 
@@ -46,7 +46,7 @@ const char *prom_metric_get_text(pool *p, struct prom_metric *metric);
  */
 
 /* Increment the specified metric ID. */
-int prom_metric_incr_value(pool *p, struct prom_metric *metric,
+int prom_metric_incr_value(pool *p, const struct prom_metric *metric,
   int32_t incr, pr_table_t *labels);
 
 struct prom_metric *prom_metric_create(pool *p, const char *name);

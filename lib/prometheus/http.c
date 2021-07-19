@@ -23,7 +23,7 @@
  */
 
 #include "mod_prometheus.h"
-#include "http.h"
+#include "prometheus/http.h"
 
 /* Per libmicrohttpd docs, we should define this after we have our system
  * headers, but before including `microhttpd.h`.

@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-/* Registry API tests. */
+/* HTTP API tests. */
 
 #include "tests.h"
-#include "http.h"
+#include "prometheus/http.h"
 
 static pool *p = NULL;
 

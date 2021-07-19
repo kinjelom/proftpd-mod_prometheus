@@ -26,9 +26,11 @@
 #define MOD_PROMETHEUS_METRIC_DB_H
 
 #include "mod_prometheus.h"
+#include "prometheus/db.h"
 
-int prom_metric_db_close(pool *p, void *dbh);
-void *prom_metric_db_open(pool *p, const char *tables_path);
-void *prom_metric_db_init(pool *p, const char *tables_path, int flags);
+int prom_metric_db_close(pool *p, struct prom_dbh *dbh);
+struct prom_dbh *prom_metric_db_open(pool *p, const char *tables_path);
+struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
+  int flags);
 
 #endif /* MOD_PROMETHEUS_METRIC_DB_H */

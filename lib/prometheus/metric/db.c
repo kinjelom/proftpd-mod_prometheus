@@ -23,9 +23,8 @@
  */
 
 #include "mod_prometheus.h"
-#include "db.h"
-
-#include <sqlite3.h>
+#include "prometheus/db.h"
+#include "prometheus/metric/db.h"
 
 #define PROM_METRICS_DB_SCHEMA_NAME	"prom_metrics"
 #define PROM_METRICS_DB_SCHEMA_VERSION	1
@@ -36,21 +35,6 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
     const char *db_path) {
   int res;
   const char *stmt, *errstr = NULL;
-
-  /* CREATE TABLE samples (
-   *   sample_id INTEGER NOT NULL PRIMARY KEY,
-   *   metric_id INTEGER NOT NULL,
-   *   sample_value FLOAT NOT NULL
-   * );
-   */
-  stmt = "CREATE TABLE IF NOT EXISTS samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value FLOAT NOT NULL);";
-  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
-  if (res < 0) {
-    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
-      "error executing '%s': %s", stmt, errstr);
-    errno = EPERM;
-    return -1;
-  }
 
   /* CREATE TABLE metrics (
    *   metric_id INTEGER NOT NULL PRIMARY KEY,
@@ -67,10 +51,91 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
+  /* CREATE INDEX metric_id_idx */
+  stmt = "CREATE INDEX IF NOT EXISTS metric_id_idx ON metrics (metric_id);";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  /* CREATE TABLE samples (
+   *   sample_id INTEGER NOT NULL PRIMARY KEY,
+   *   metric_id INTEGER NOT NULL,
+   *   sample_value FLOAT NOT NULL,
+   *   FOREIGN KEY (metric_id) REFERENCES metrics (metric_id)
+   * );
+   */
+  stmt = "CREATE TABLE IF NOT EXISTS samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value FLOAT NOT NULL, FOREIGN KEY (metric_id) REFERENCES metrics (metric_id));";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  /* CREATE INDEX sample_id_idx */
+  stmt = "CREATE INDEX IF NOT EXISTS sample_id_idx ON samples (sample_id);";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
   return 0;
 }
 
-int prom_metric_db_close(pool *p, void *dbh) {
+static int metrics_db_truncate_tables(pool *p, struct prom_dbh *dbh) {
+  int res;
+  const char *index_name, *stmt, *errstr = NULL;
+
+  stmt = "DELETE FROM samples;";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  stmt = "DELETE FROM metrics;";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  /* Note: don't forget to rebuild the indices, too! */
+
+  index_name = "sample_id_idx";
+  res = prom_db_reindex(p, dbh, index_name, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error reindexing '%s': %s", index_name, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  index_name = "metric_id_idx";
+  res = prom_db_reindex(p, dbh, index_name, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error reindexing '%s': %s", index_name, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+int prom_metric_db_close(pool *p, struct prom_dbh *dbh) {
   if (p == NULL) {
     errno = EINVAL;
     return -1;
@@ -163,7 +228,7 @@ struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
     return NULL;
   }
 
-  res = reverse_db_truncate_tables(p, dbh);
+  res = metrics_db_truncate_tables(p, dbh);
   if (res < 0) {
     xerrno = errno;
     (void) prom_db_close(p, dbh);

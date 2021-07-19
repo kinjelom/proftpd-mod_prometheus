@@ -23,8 +23,8 @@
  */
 
 #include "mod_prometheus.h"
-#include "registry.h"
-#include "metric.h"
+#include "prometheus/registry.h"
+#include "prometheus/metric.h"
 
 struct prom_registry {
   pool *pool;

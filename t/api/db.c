@@ -25,7 +25,7 @@
 /* Database API tests. */
 
 #include "tests.h"
-#include "db.h"
+#include "prometheus/db.h"
 
 static pool *p = NULL;
 

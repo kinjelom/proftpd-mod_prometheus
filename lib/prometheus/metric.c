@@ -23,7 +23,7 @@
  */
 
 #include "mod_prometheus.h"
-#include "metric.h"
+#include "prometheus/metric.h"
 
 struct prom_metric {
   pool *pool;
@@ -57,7 +57,7 @@ const char *prom_metric_get_text(pool *p, struct prom_metric *metric) {
 }
 
 /* Increment the specified metric ID. */
-int prom_metric_incr_value(pool *p, struct prom_metric *metric,
+int prom_metric_incr_value(pool *p, const struct prom_metric *metric,
     int32_t incr, pr_table_t *labels) {
   if (p == NULL ||
       metric == NULL) {

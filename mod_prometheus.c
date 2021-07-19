@@ -27,10 +27,10 @@
  */
 
 #include "mod_prometheus.h"
-#include "db.h"
-#include "registry.h"
-#include "metric.h"
-#include "http.h"
+#include "prometheus/db.h"
+#include "prometheus/registry.h"
+#include "prometheus/metric.h"
+#include "prometheus/http.h"
 
 /* Defaults */
 #define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
@@ -809,14 +809,14 @@ static void ev_incr_value(const char *metric_name, int32_t incr,
     pr_table_t *labels) {
   int res;
   pool *p;
-  struct prom_metric *metric;
+  const struct prom_metric *metric;
 
   p = session.pool;
   if (p == NULL) {
     p = prometheus_pool;
   }
 
-  metric = prom_registry_get_metric(p, metric_name);
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
   if (metric == NULL) {
     pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
       metric_name);
@@ -997,7 +997,8 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
   prometheus_registry = prom_registry_init(prometheus_pool);
 
-  if (prom_metric_init(prometheus_pool, prometheus_tables_dir) < 0) {
+  if (prom_metric_init(prometheus_pool, prometheus_tables_dir,
+      prometheus_registry) < 0) {
     pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
       ": unable to initialize metrics, failing to start up: %s",
       strerror(errno));

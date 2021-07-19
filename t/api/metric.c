@@ -25,7 +25,7 @@
 /* Metric API tests. */
 
 #include "tests.h"
-#include "metric.h"
+#include "prometheus/metric.h"
 
 static pool *p = NULL;
 
