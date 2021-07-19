@@ -13,16 +13,18 @@ VPATH=@srcdir@
 MODULE_LIBS=@MODULE_LIBS@
 MODULE_NAME=mod_prometheus
 MODULE_OBJS=mod_prometheus.o \
+  db.o \
   http.o \
   metric.o \
-  registry.o \
-  db.o
+  metric/db.o \
+  registry.o
 
 SHARED_MODULE_OBJS=mod_prometheus.lo \
+  db.lo
   http.lo \
   metric.lo \
-  registry.lo \
-  db.lo
+  metric/db.o \
+  registry.lo
 
 # Necessary redefinitions
 INCLUDES=-I. -I./include -I../.. -I../../include @INCLUDES@

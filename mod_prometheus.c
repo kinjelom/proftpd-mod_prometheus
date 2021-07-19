@@ -41,12 +41,14 @@ int prometheus_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
-static struct prom_http *prometheus_exporter_http = NULL;
-static pid_t prometheus_exporter_pid = 0;
-
 static int prometheus_engine = FALSE;
 static unsigned long prometheus_opts = 0UL;
 static struct timeval prometheus_start_tv;
+static const char *prometheus_tables_dir = NULL;
+
+static struct prom_registry *prometheus_registry = NULL;
+static struct prom_http *prometheus_exporter_http = NULL;
+static pid_t prometheus_exporter_pid = 0;
 
 /* Number of seconds to wait for the exporter process to stop before
  * we terminate it with extreme prejudice.
@@ -219,8 +221,7 @@ static void prom_daemonize(const char *daemon_dir) {
   pr_fsio_chdir(daemon_dir, 0);
 }
 
-static pid_t prom_exporter_start(pool *p, const char *tables_dir,
-    unsigned short exporter_port) {
+static pid_t prom_exporter_start(pool *p, unsigned short exporter_port) {
   pid_t exporter_pid;
   char *exporter_chroot = NULL;
 
@@ -246,7 +247,7 @@ static pid_t prom_exporter_start(pool *p, const char *tables_dir,
   pr_trace_msg(trace_channel, 3, "forked exporter PID %lu",
     (unsigned long) session.pid);
 
-  prom_daemonize(tables_dir);
+  prom_daemonize(prometheus_tables_dir);
 
   /* Install our own signal handlers (mostly to ignore signals) */
   (void) signal(SIGALRM, SIG_IGN);
@@ -264,7 +265,8 @@ static pid_t prom_exporter_start(pool *p, const char *tables_dir,
     /* Chroot to the PrometheusTables/empty/ directory before dropping
      * root privs.
      */
-    exporter_chroot = pdircat(prometheus_pool, tables_dir, "empty", NULL);
+    exporter_chroot = pdircat(prometheus_pool, prometheus_tables_dir, "empty",
+      NULL);
     res = chroot(exporter_chroot);
     if (res < 0) {
       int xerrno = errno;
@@ -947,13 +949,16 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
+
+  prometheus_export_http = NULL;
+  prometheus_registry = NULL;
+  prometheus_tables_dir = NULL;
 }
 #endif /* PR_SHARED_MODULE */
 
 static void prom_postparse_ev(const void *event_data, void *user_data) {
   config_rec *c;
-  const char *tables_dir;
-  int exporter_port, sftp_loaded = FALSE, tls_loaded = FALSE;
+  int exporter_port;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
   if (c != NULL) {
@@ -988,24 +993,17 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  tables_dir = c->argv[0];
+  prometheus_tables_dir = c->argv[0];
 
-#if TJ
-  if (prom_db_set_root(tables_dir) < 0) {
-    /* Unable to configure the PrometheusTables root for some reason... */
+  prometheus_registry = prom_registry_init(prometheus_pool);
 
-    prometheus_engine = FALSE;
-    return;
+  if (prom_metric_init(prometheus_pool, prometheus_tables_dir) < 0) {
+    pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
+      ": unable to initialize metrics, failing to start up: %s",
+      strerror(errno));
+    pr_session_disconnect(&prometheus_module, PR_SESS_DISCONNECT_BAD_CONFIG,
+      "Failed metrics initialization");
   }
-#endif
-
-  /* Create the variable database table files, based on the configured
-   * PrometheusTables path.
-   */
-  tls_loaded = pr_module_exists("mod_tls.c");
-  sftp_loaded = pr_module_exists("mod_sftp.c");
-
-  /* XXX Open various database tables */
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusExporter", FALSE);
   if (c == NULL) {
@@ -1013,25 +1011,36 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": missing required PrometheusExporter directive, disabling module");
 
-    /* XXX Need to close database tables here. */
+    prom_metric_free(prometheus_pool);
+    prom_registry_free(prometheus_registry);
+    prometheus_registry = NULL;
+
     return;
   }
 
   if (prom_http_init(prometheus_pool) < 0) {
+    prom_metric_free(prometheus_pool);
+    prom_registry_free(prometheus_registry);
+    prometheus_registry = NULL;
+
     pr_log_pri(PR_LOG_ERR, MOD_PROMETHEUS_VERSION
-      ": unable to initialize HTTP API: %s", strerror(errno));
+      ": unable to initialize HTTP API, failing to start up: %s",
+      strerror(errno));
+    pr_session_disconnect(&prometheus_module, PR_SESS_DISCONNECT_BAD_CONFIG,
+      "Failed HTTP initialization");
   }
 
   exporter_port = *((unsigned short *) c->argv[0]);
 
-  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, tables_dir,
-    exporter_port);
+  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_port);
   if (prometheus_exporter_pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
 
-    /* XXX Need to close database tables here. */
+    prom_metric_free(prometheus_pool);
+    prom_registry_free(prometheus_registry);
+    prometheus_registry = NULL;
   }
 }
 

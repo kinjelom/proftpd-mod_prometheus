@@ -25,11 +25,26 @@
 #include "mod_prometheus.h"
 #include "metric.h"
 
-static const char *metric_prefix = "proftpd_";
+struct prom_metric {
+  pool *pool;
+  const char *name;
+
+  /* XXX Associated counter, gauge, histogram, if present */
+};
 
 static const char *trace_channel = "prometheus.metric";
 
-/* Returns the text for the specified metric ID. */
+/* Returns the name of the given metric. */
+const char *prom_metric_get_name(struct prom_metric *metric) {
+  if (metric == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  return metric->name;
+}
+
+/* Returns the text for the given metric. */
 const char *prom_metric_get_text(pool *p, struct prom_metric *metric) {
   if (p == NULL ||
       metric == NULL) {
@@ -54,15 +69,32 @@ int prom_metric_incr_value(pool *p, struct prom_metric *metric,
   return -1;
 }
 
-struct prom_metric *prom_metric_alloc(pool *p, const char *name) {
+struct prom_metric *prom_metric_create(pool *p, const char *name) {
+  pool *metric_pool;
+  struct prom_metric *metric;
+
   if (p == NULL ||
       name == NULL) {
     errno = EINVAL;
     return NULL;
   }
 
-  errno = ENOSYS;
-  return NULL;
+  metric_pool = make_sub_pool(p);
+  pr_pool_tag(metric_pool, "Prometheus metric pool");
+
+  metric = pcalloc(metric_pool, sizeof(struct prom_metric));
+  metric->pool = metric_pool;
+  metric->name = pstrdup(metric->pool, name);
+
+/* XXX Insert a row in the db for this new metric -- if it doesn't already
+ * exist? -- and associate the metric_id to the handle, too!
+ *
+ * To do this, we add the metric to the registry, which will add the
+ * registry dbh to the metric.  THEN we can use the dbh to add ourselves
+ * to the db.  Or not.  It's an incestuous tangle, registry/dbh/metric.
+ */
+
+  return metric;
 }
 
 int prom_metric_destroy(pool *p, struct prom_metric *metric) {
@@ -71,14 +103,16 @@ int prom_metric_destroy(pool *p, struct prom_metric *metric) {
     return -1;
   }
 
-  errno = ENOSYS;
-  return -1;
+  destroy_pool(metric->pool);
+  return 0;
 }
 
-int prom_metric_init(pool *p) {
+int prom_metric_init(pool *p, const char *tables_path,
+    struct prom_registry *registry) {
+
   /* XXX Automatically instantiates metrics objects for all known metric
-   * names, * modulo loaded modules (mod_sftp, mod_ban, mod_tls, etc).
-   * Registers them in the registry.
+   * names.
+   * Registers them in the given registry.
    */
 
 /* XXX Once all metrics have been created, registered, call
@@ -87,12 +121,15 @@ int prom_metric_init(pool *p) {
  * Why?  We ideally want to return all metrics in sorted order, every time
  * we are scraped.  So doing a one-time ordering of the list/keys is best.
  * Plus it will help with lookups.
+ *
+ * Since we're dealing with a table, maybe it's easiest to get the keys,
+ * sort them, and cache the sorted key list in the registry handle?
  */
 
   errno = ENOSYS;
   return -1;
 }
 
-int prom_metric_free(void) {
+int prom_metric_free(pool *p) {
   return 0;
 }

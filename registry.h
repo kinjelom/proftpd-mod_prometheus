@@ -26,15 +26,20 @@
 #define MOD_PROMETHEUS_REGISTRY_H
 
 #include "mod_prometheus.h"
-#include "metric.h"
+
+struct prom_registry;
 
 /* Returns the text for all collector's metrics in the registry. */
-const char *prom_registry_get_text(pool *p);
+const char *prom_registry_get_text(pool *p, struct prom_registry *registry);
+
+int prom_registry_add_metric(struct prom_registry *registry, void *metric);
+int prom_registry_remove_metric(struct prom_registry *registry, void *metric);
 
 /* Returns the metric object for the given metric name. */
-struct prom_metric *prom_registry_get_metric(pool *p, const char *metric_name);
+const void *prom_registry_get_metric(struct prom_registry *registry,
+  const char *metric_name);
 
-int prom_registry_init(pool *p);
-int prom_registry_free(void);
+struct prom_registry *prom_registry_init(pool *p);
+int prom_registry_free(struct prom_registry *registry);
 
 #endif /* MOD_PROMETHEUS_REGISTRY_H */

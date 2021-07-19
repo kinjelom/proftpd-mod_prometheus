@@ -26,8 +26,12 @@
 #define MOD_PROMETHEUS_METRIC_H
 
 #include "mod_prometheus.h"
+#include "registry.h"
 
 struct prom_metric;
+
+/* Returns the metric name. */
+const char *prom_metric_get_name(struct prom_metric *metric);
 
 /* Returns the text for the metric. */
 const char *prom_metric_get_text(pool *p, struct prom_metric *metric);
@@ -45,11 +49,11 @@ const char *prom_metric_get_text(pool *p, struct prom_metric *metric);
 int prom_metric_incr_value(pool *p, struct prom_metric *metric,
   int32_t incr, pr_table_t *labels);
 
-struct prom_metric *prom_metric_alloc(pool *p, const char *name);
-
+struct prom_metric *prom_metric_create(pool *p, const char *name);
 int prom_metric_destroy(pool *p, struct prom_metric *metric);
 
-int prom_metric_init(pool *p);
-int prom_metric_free(void);
+int prom_metric_init(pool *p, const char *tables_path,
+  struct prom_registry *registry);
+int prom_metric_free(pool *p);
 
 #endif /* MOD_PROMETHEUS_METRIC_H */

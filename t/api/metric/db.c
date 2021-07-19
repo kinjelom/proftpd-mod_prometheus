@@ -22,29 +22,46 @@
  * source distribution.
  */
 
-/* Testsuite management */
+/* Metric database API tests. */
 
-#ifndef MOD_PROMETHEUS_TESTS_H
-#define MOD_PROMETHEUS_TESTS_H
+#include "tests.h"
+#include "metric.h"
+#include "metric/db.h"
 
-#include "mod_prometheus.h"
+static pool *p = NULL;
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+static void set_up(void) {
+  if (p == NULL) {
+    p = permanent_pool = make_sub_pool(NULL);
+  }
 
-int tests_rmpath(pool *p, const char *path);
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("prometheus.metric.db", 1, 20);
+  }
 
-Suite *tests_get_db_suite(void);
-Suite *tests_get_metric_suite(void);
-Suite *tests_get_metric_db_suite(void);
-Suite *tests_get_registry_suite(void);
-Suite *tests_get_http_suite(void);
+  mark_point();
+}
 
-extern volatile unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
+static void tear_down(void) {
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("prometheus.metric.db", 0, 0);
+  }
 
-#endif /* MOD_PROMETHEUS_TESTS_H */
+  if (p != NULL) {
+    destroy_pool(p);
+    p = permanent_pool = NULL;
+  }
+}
+
+Suite *tests_get_metric_db_suite(void) {
+  Suite *suite;
+  TCase *testcase;
+
+  suite = suite_create("metric.db");
+  testcase = tcase_create("base");
+
+  tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  suite_add_tcase(suite, testcase);
+  return suite;
+}

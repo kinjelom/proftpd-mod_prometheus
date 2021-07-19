@@ -47,13 +47,13 @@ enum MHD_Result {
 };
 #endif
 
-static const char *trace_channel = "prometheus.http";
-static const char *clf_channel = "prometheus.http.clf";
-
 struct prom_http {
   pool *pool;
   struct MHD_Daemon *mhd;
 };
+
+static const char *trace_channel = "prometheus.http";
+static const char *clf_channel = "prometheus.http.clf";
 
 static void log_cb(void *user_data, const char *fmt, va_list msg) {
   pr_trace_vmsg(trace_channel, 7, fmt, msg);
@@ -194,7 +194,7 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
   if (strcmp(http_uri, "/metrics") == 0) {
     status_code = MHD_HTTP_OK;
-    text = pstrcat(resp_pool, "OK\n", NULL);
+    text = pstrcat(resp_pool, "OK\n\n", NULL);
     textlen = strlen(text);
 
     resp = MHD_create_response_from_buffer(textlen, (void *) text,

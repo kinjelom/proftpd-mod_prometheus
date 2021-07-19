@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_prometheus metrics datastore API
+ * Copyright (c) 2021 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,29 +22,13 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_PROMETHEUS_TESTS_H
-#define MOD_PROMETHEUS_TESTS_H
+#ifndef MOD_PROMETHEUS_METRIC_DB_H
+#define MOD_PROMETHEUS_METRIC_DB_H
 
 #include "mod_prometheus.h"
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+int prom_metric_db_close(pool *p, void *dbh);
+void *prom_metric_db_open(pool *p, const char *tables_path);
+void *prom_metric_db_init(pool *p, const char *tables_path, int flags);
 
-int tests_rmpath(pool *p, const char *path);
-
-Suite *tests_get_db_suite(void);
-Suite *tests_get_metric_suite(void);
-Suite *tests_get_metric_db_suite(void);
-Suite *tests_get_registry_suite(void);
-Suite *tests_get_http_suite(void);
-
-extern volatile unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
-
-#endif /* MOD_PROMETHEUS_TESTS_H */
+#endif /* MOD_PROMETHEUS_METRIC_DB_H */
