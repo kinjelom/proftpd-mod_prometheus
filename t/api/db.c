@@ -149,7 +149,7 @@ START_TEST (db_open_with_version_test) {
   res = prom_db_close(p, dbh);
   fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
-  flags |= PROXY_DB_OPEN_FL_INTEGRITY_CHECK;
+  flags |= PROM_DB_OPEN_FL_INTEGRITY_CHECK;
 
   mark_point();
   dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
@@ -164,7 +164,7 @@ START_TEST (db_open_with_version_test) {
   if (getenv("CI") == NULL &&
       getenv("TRAVIS") == NULL) {
     /* Enable the vacuuming for these tests. */
-    flags |= PROXY_DB_OPEN_FL_VACUUM;
+    flags |= PROM_DB_OPEN_FL_VACUUM;
 
     mark_point();
     dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
@@ -176,14 +176,14 @@ START_TEST (db_open_with_version_test) {
     res = prom_db_close(p, dbh);
     fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
 
-    flags &= ~PROXY_DB_OPEN_FL_VACUUM;
+    flags &= ~PROM_DB_OPEN_FL_VACUUM;
   }
 
-  flags &= ~PROXY_DB_OPEN_FL_INTEGRITY_CHECK;
+  flags &= ~PROM_DB_OPEN_FL_INTEGRITY_CHECK;
 
   mark_point();
   schema_version = 76;
-  flags |= PROXY_DB_OPEN_FL_SCHEMA_VERSION_CHECK|PROXY_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
+  flags |= PROM_DB_OPEN_FL_SCHEMA_VERSION_CHECK|PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
   dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh == NULL, "Opened table with version skew unexpectedly");
@@ -191,7 +191,7 @@ START_TEST (db_open_with_version_test) {
     strerror(errno), errno);
 
   mark_point();
-  flags &= ~PROXY_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
+  flags &= ~PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
   dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
   fail_unless(dbh != NULL,
@@ -457,14 +457,14 @@ START_TEST (db_bind_stmt_test) {
   mark_point();
   stmt = "SELECT COUNT(*) FROM table";
   idx = -1;
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle invalid index %d", idx);
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   idx = 1;
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle unprepared statement");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got '%s' (%d)", ENOENT,
     strerror(errno), errno);
@@ -479,47 +479,47 @@ START_TEST (db_bind_stmt_test) {
     strerror(errno));
 
   mark_point();
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_INT, NULL);
   fail_unless(res < 0, "Failed to handle missing INT value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   int_val = 7;
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_INT, &int_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_LONG, NULL);
   fail_unless(res < 0, "Failed to handle missing LONG value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   long_val = 7;
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_LONG,
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_LONG,
     &long_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_TEXT, NULL);
   fail_unless(res < 0, "Failed to handle missing TEXT value");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text_val = "testing";
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_TEXT, text_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_TEXT, text_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_NULL, NULL);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_NULL, NULL);
   fail_unless(res < 0, "Failed to handle invalid NULL value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
@@ -532,7 +532,7 @@ START_TEST (db_bind_stmt_test) {
 
   mark_point();
   int_val = 7;
-  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROXY_DB_BIND_TYPE_INT, &int_val);
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_INT, &int_val);
   fail_unless(res == 0, "Failed to bind INT value: %s", strerror(errno));
 
   res = prom_db_close(p, dbh);
@@ -650,6 +650,50 @@ START_TEST (db_reindex_test) {
 }
 END_TEST
 
+START_TEST (db_last_row_id_test) {
+  int res;
+  const char *table_path, *schema_name;
+  int64_t row_id = 0;
+  struct prom_dbh *dbh;
+
+  mark_point();
+  res = prom_db_last_row_id(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_db_last_row_id(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null dbh");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  (void) unlink(db_test_table);
+  table_path = db_test_table;
+  schema_name = "prometheus_test";
+
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
+  fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
+    strerror(errno));
+
+  mark_point();
+  res = prom_db_last_row_id(p, dbh, NULL);
+  fail_unless(res < 0, "Failed to handle null row_id");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_db_last_row_id(p, dbh, &row_id);
+  fail_unless(res == 0, "Failed to get last row ID: %s", strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  (void) unlink(db_test_table);
+}
+END_TEST
+
 Suite *tests_get_db_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -668,6 +712,7 @@ Suite *tests_get_db_suite(void) {
   tcase_add_test(testcase, db_bind_stmt_test);
   tcase_add_test(testcase, db_exec_prepared_stmt_test);
   tcase_add_test(testcase, db_reindex_test);
+  tcase_add_test(testcase, db_last_row_id_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

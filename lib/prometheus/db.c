@@ -1011,6 +1011,19 @@ int prom_db_reindex(pool *p, struct prom_dbh *dbh, const char *index_name,
   return res;
 }
 
+int prom_db_last_row_id(pool *p, struct prom_dbh *dbh, int64_t *id) {
+  if (p == NULL ||
+      dbh == NULL ||
+      id == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  (void) p;
+  *id = sqlite3_last_insert_rowid(dbh->db);
+  return 0;
+}
+
 int prom_db_init(pool *p) {
   const char *version;
 

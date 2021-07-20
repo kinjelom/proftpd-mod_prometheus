@@ -135,6 +135,32 @@ static int metrics_db_truncate_tables(pool *p, struct prom_dbh *dbh) {
   return 0;
 }
 
+int prom_metric_db_add_metric(pool *p, struct prom_dbh *dbh,
+    const char *metric_name) {
+  if (p == NULL ||
+      dbh == NULL ||
+      metric_name == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
+int prom_metric_db_exists_metric(pool *p, struct prom_dbh *dbh,
+    const char *metric_name) {
+  if (p == NULL ||
+      dbh == NULL ||
+      metric_name == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
 int prom_metric_db_close(pool *p, struct prom_dbh *dbh) {
   if (p == NULL) {
     errno = EINVAL;

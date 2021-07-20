@@ -125,7 +125,7 @@ jobs:
         if: ${{ matrix.container != 'alpine:3.14' }}
         run: |
           cd proftpd/contrib/mod_prometheus
-          make TEST_VERBOSE=1 check
+          make TEST_VERBOSE=1 api-tests
 
       - name: Install as static module
         run: |

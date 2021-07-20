@@ -300,7 +300,8 @@ static pid_t prom_exporter_start(pool *p, unsigned short exporter_port) {
   session.gid = getegid();
   PRIVS_REVOKE
 
-  prometheus_exporter_http = prom_http_start(p, exporter_port);
+  prometheus_exporter_http = prom_http_start(p, exporter_port,
+    prometheus_registry);
   if (prometheus_exporter_http == NULL) {
     return 0;
   }
@@ -824,7 +825,14 @@ static void ev_incr_value(const char *metric_name, int32_t incr,
   }
 
 /* XXX need to add protocol label, others */
-  res = prom_metric_incr_value(p, metric, incr, labels);
+
+  if (incr >= 0) {
+    res = prom_metric_incr(metric, incr, labels);
+
+  } else {
+    res = prom_metric_decr(metric, -incr, labels);
+  }
+
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
       "error %s %s: %s",
@@ -956,9 +964,68 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 }
 #endif /* PR_SHARED_MODULE */
 
+static void create_metrics(struct prom_dbh *dbh) {
+  pool *tmp_pool;
+  int res;
+  struct prom_metric *metric;
+
+  tmp_pool = make_sub_pool(prometheus_pool);
+  pr_pool_tag(tmp_pool, "Prometheus metrics creation pool");
+
+  metric = prom_metric_create(prometheus_pool, "build_info", dbh);
+  prom_metric_add_counter(metric, NULL, "ProFTPD build information");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+
+  } else {
+    pr_table_t *labels;
+
+    labels = pr_table_nalloc(tmp_pool, 0, 4);
+    (void) pr_table_add_dup(labels, "proftpd_version", pr_version_get_str(), 0);
+    (void) pr_table_add_dup(labels, "mod_prometheus_version",
+      MOD_PROMETHEUS_VERSION, 0);
+
+    res = prom_metric_incr(metric, 1, labels);
+    if (res <  0) {
+      pr_trace_msg(trace_channel, 3, "error incrementing metric '%s': %s",
+        prom_metric_get_name(metric), strerror(errno));
+    }
+  }
+
+  metric = prom_metric_create(prometheus_pool, "startup_time_seconds", dbh);
+  prom_metric_add_counter(metric, NULL,
+    "ProFTPD startup time, in unixtime seconds");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+
+  } else {
+    time_t now;
+
+    now = time(NULL);
+    res = prom_metric_incr(metric, now, NULL);
+    if (res <  0) {
+      pr_trace_msg(trace_channel, 3, "error incrementing metric '%s': %s",
+        prom_metric_get_name(metric), strerror(errno));
+    }
+  }
+
+  res = prom_registry_sort_metrics(tmp_pool, prometheus_registry);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error sorting registry metrics: %s",
+      strerror(errno));
+  }
+
+  destroy_pool(tmp_pool);
+}
+
 static void prom_postparse_ev(const void *event_data, void *user_data) {
   config_rec *c;
   int exporter_port;
+  struct prom_dbh *dbh;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
   if (c != NULL) {
@@ -995,16 +1062,19 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
   prometheus_tables_dir = c->argv[0];
 
-  prometheus_registry = prom_registry_init(prometheus_pool);
+  prometheus_registry = prom_registry_init(prometheus_pool, "proftpd");
 
-  if (prom_metric_init(prometheus_pool, prometheus_tables_dir,
-      prometheus_registry) < 0) {
+  dbh = prom_metric_init(prometheus_pool, prometheus_tables_dir);
+  if (dbh == NULL) {
     pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
       ": unable to initialize metrics, failing to start up: %s",
       strerror(errno));
     pr_session_disconnect(&prometheus_module, PR_SESS_DISCONNECT_BAD_CONFIG,
       "Failed metrics initialization");
   }
+
+  /* Create our known metrics, and register them. */
+  create_metrics(dbh);
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusExporter", FALSE);
   if (c == NULL) {

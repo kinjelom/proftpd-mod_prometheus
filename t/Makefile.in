@@ -24,11 +24,20 @@ TEST_API_DEPS=\
   $(top_srcdir)/src/table.o \
   $(top_srcdir)/src/event.o \
   $(top_srcdir)/src/timers.o \
+  $(top_srcdir)/src/stash.o \
   $(top_srcdir)/src/modules.o \
+  $(top_srcdir)/src/configdb.o \
+  $(top_srcdir)/src/parser.o \
+  $(top_srcdir)/src/fsio.o \
+  $(top_srcdir)/src/netio.o \
+  $(top_srcdir)/src/inet.o \
   $(top_srcdir)/src/netaddr.o \
+  $(top_srcdir)/src/response.o \
+  $(top_srcdir)/src/auth.o \
   $(top_srcdir)/src/env.o \
   $(top_srcdir)/src/trace.o \
   $(top_srcdir)/src/support.o \
+  $(top_srcdir)/src/error.o \
   $(module_srcdir)/lib/prometheus/db.o \
   $(module_srcdir)/lib/prometheus/http.o \
   $(module_srcdir)/lib/prometheus/metric.o \

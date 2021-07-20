@@ -26,6 +26,7 @@
 
 #include "tests.h"
 #include "prometheus/http.h"
+#include "prometheus/registry.h"
 
 static pool *p = NULL;
 
@@ -39,11 +40,11 @@ static void set_up(void) {
   }
 
   mark_point();
-  prometheus_http_init(p);
+  prom_http_init(p);
 }
 
 static void tear_down(void) {
-  prometheus_http_free();
+  prom_http_free();
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("prometheus.http", 0, 0);
@@ -99,15 +100,25 @@ END_TEST
 START_TEST (http_start_test) {
   int res;
   struct prom_http *http;
+  struct prom_registry *registry;
 
   mark_point();
-  http = prom_http_start(NULL, 0);
+  http = prom_http_start(NULL, 0, NULL);
   fail_unless(http == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  http = prom_http_start(p, 0);
+  http = prom_http_start(p, 0, NULL);
+  fail_unless(http == NULL, "Failed to handle null registry");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+
+  /* Note: We don't need a real registry here, just a non-null pointer. */
+  registry = pcalloc(p, 8);
+  http = prom_http_start(p, 0, registry);
   fail_unless(http != NULL, "Failed to start http: %s", strerror(errno));
 
   mark_point();
@@ -118,7 +129,6 @@ END_TEST
 
 START_TEST (http_run_loop_test) {
   int res;
-  struct prom_http *http;
 
   mark_point();
   res = prom_http_run_loop(NULL, NULL);

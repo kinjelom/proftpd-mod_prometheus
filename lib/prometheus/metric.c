@@ -24,12 +24,18 @@
 
 #include "mod_prometheus.h"
 #include "prometheus/metric.h"
+#include "prometheus/metric/db.h"
 
 struct prom_metric {
   pool *pool;
+  struct prom_dbh *dbh;
   const char *name;
 
-  /* XXX Associated counter, gauge, histogram, if present */
+  const char *counter_name;
+  int64_t counter_id;
+
+  const char *gauge_name;
+  int64_t gauge_id;
 };
 
 static const char *trace_channel = "prometheus.metric";
@@ -56,11 +62,9 @@ const char *prom_metric_get_text(pool *p, struct prom_metric *metric) {
   return NULL;
 }
 
-/* Increment the specified metric ID. */
-int prom_metric_incr_value(pool *p, const struct prom_metric *metric,
-    int32_t incr, pr_table_t *labels) {
-  if (p == NULL ||
-      metric == NULL) {
+int prom_metric_decr(const struct prom_metric *metric, uint32_t decr,
+    pr_table_t *labels) {
+  if (metric == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -69,12 +73,126 @@ int prom_metric_incr_value(pool *p, const struct prom_metric *metric,
   return -1;
 }
 
-struct prom_metric *prom_metric_create(pool *p, const char *name) {
+int prom_metric_incr(const struct prom_metric *metric, uint32_t incr,
+    pr_table_t *labels) {
+  if (metric == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
+int prom_metric_set(const struct prom_metric *metric, uint32_t val,
+    pr_table_t *labels) {
+  if (metric == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
+int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
+    const char *help_text) {
+  int res;
+
+  if (metric == NULL ||
+      help_text == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (suffix != NULL) {
+    metric->counter_name = pstrcat(metric->pool, metric->name, "_", suffix,
+      NULL);
+
+  } else {
+    metric->counter_name = metric->name;
+  }
+
+  res = prom_metric_db_exists_metric(metric->pool, metric->dbh,
+    metric->counter_name);
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
+      metric->counter_name);
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_metric_db_add_metric(metric->pool, metric->dbh,
+    metric->counter_name);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
+      metric->counter_name, strerror(errno));
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_db_last_row_id(metric->pool, metric->dbh, &(metric->counter_id));
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error obtaining '%s' metric row ID: %s",
+      metric->counter_name, strerror(errno));
+  }
+
+  return 0;
+}
+
+int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
+    const char *help_text) {
+  int res;
+
+  if (metric == NULL ||
+      help_text == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (suffix != NULL) {
+    metric->gauge_name = pstrcat(metric->pool, metric->name, "_", suffix,
+      NULL);
+
+  } else {
+    metric->gauge_name = metric->name;
+  }
+
+  res = prom_metric_db_exists_metric(metric->pool, metric->dbh,
+    metric->gauge_name);
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
+      metric->gauge_name);
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_metric_db_add_metric(metric->pool, metric->dbh,
+    metric->gauge_name);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
+      metric->gauge_name, strerror(errno));
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_db_last_row_id(metric->pool, metric->dbh, &(metric->gauge_id));
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error obtaining '%s' metric row ID: %s",
+      metric->gauge_name, strerror(errno));
+  }
+
+  return 0;
+}
+
+struct prom_metric *prom_metric_create(pool *p, const char *name,
+    struct prom_dbh *dbh) {
   pool *metric_pool;
   struct prom_metric *metric;
 
   if (p == NULL ||
-      name == NULL) {
+      name == NULL ||
+      dbh == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -85,14 +203,7 @@ struct prom_metric *prom_metric_create(pool *p, const char *name) {
   metric = pcalloc(metric_pool, sizeof(struct prom_metric));
   metric->pool = metric_pool;
   metric->name = pstrdup(metric->pool, name);
-
-/* XXX Insert a row in the db for this new metric -- if it doesn't already
- * exist? -- and associate the metric_id to the handle, too!
- *
- * To do this, we add the metric to the registry, which will add the
- * registry dbh to the metric.  THEN we can use the dbh to add ourselves
- * to the db.  Or not.  It's an incestuous tangle, registry/dbh/metric.
- */
+  metric->dbh = dbh;
 
   return metric;
 }
@@ -107,27 +218,21 @@ int prom_metric_destroy(pool *p, struct prom_metric *metric) {
   return 0;
 }
 
-int prom_metric_init(pool *p, const char *tables_path,
-    struct prom_registry *registry) {
+struct prom_dbh *prom_metric_init(pool *p, const char *tables_path) {
+  struct prom_dbh *dbh;
 
-  /* XXX Automatically instantiates metrics objects for all known metric
-   * names.
-   * Registers them in the given registry.
-   */
+  dbh = prom_metric_db_init(p, tables_path, 0);
+  if (dbh == NULL) {
+    int xerrno = errno;
 
-/* XXX Once all metrics have been created, registered, call
- * prom_registry_sort_metrics().
- *
- * Why?  We ideally want to return all metrics in sorted order, every time
- * we are scraped.  So doing a one-time ordering of the list/keys is best.
- * Plus it will help with lookups.
- *
- * Since we're dealing with a table, maybe it's easiest to get the keys,
- * sort them, and cache the sorted key list in the registry handle?
- */
+    (void) pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
+      ": failed to initialize metrics datastore: %s", strerror(xerrno));
 
-  errno = ENOSYS;
-  return -1;
+    errno = xerrno;
+    return NULL;
+  }
+
+  return dbh;
 }
 
 int prom_metric_free(pool *p) {

@@ -49,6 +49,7 @@ enum MHD_Result {
 
 struct prom_http {
   pool *pool;
+  struct prom_registry *registry;
   struct MHD_Daemon *mhd;
 };
 
@@ -143,15 +144,16 @@ static enum MHD_Result handle_request_cb(void *user_data,
     struct MHD_Connection *conn, const char *http_uri, const char *http_method,
     const char *http_version, const char *request_body, size_t *request_bodysz,
     void **conn_user_data) {
-  pool *http_pool, *resp_pool;
+  struct prom_http *http;
+  pool *resp_pool;
   unsigned int status_code;
   const char *text;
   size_t textlen;
   struct MHD_Response *resp = NULL;
   int res;
 
-  http_pool = user_data;
-  resp_pool = make_sub_pool(http_pool);
+  http = user_data;
+  resp_pool = make_sub_pool(http->pool);
   pr_pool_tag(resp_pool, "Prometheus response pool");
 
   if (strcmp(http_method, "GET") != 0) {
@@ -194,7 +196,7 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
   if (strcmp(http_uri, "/metrics") == 0) {
     status_code = MHD_HTTP_OK;
-    text = pstrcat(resp_pool, "OK\n\n", NULL);
+    text = prom_registry_get_text(resp_pool, http->registry);
     textlen = strlen(text);
 
     resp = MHD_create_response_from_buffer(textlen, (void *) text,
@@ -232,13 +234,15 @@ static enum MHD_Result handle_request_cb(void *user_data,
   return res;
 }
 
-struct prom_http *prom_http_start(pool *p, unsigned short http_port) {
+struct prom_http *prom_http_start(pool *p, unsigned short http_port,
+    struct prom_registry *registry) {
   struct prom_http *http;
   pool *http_pool;
   struct MHD_Daemon *mhd;
   int flags;
 
-  if (p == NULL) {
+  if (p == NULL ||
+      registry == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -248,12 +252,13 @@ struct prom_http *prom_http_start(pool *p, unsigned short http_port) {
 
   http = pcalloc(http_pool, sizeof(struct prom_http));
   http->pool = http_pool;
+  http->registry = registry;
 
   pr_trace_msg(trace_channel, 9, "starting exporter on port %u", http_port);
 
   flags = MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_ERROR_LOG|MHD_USE_DEBUG;
   mhd = MHD_start_daemon(flags, http_port, NULL, NULL,
-    handle_request_cb, http->pool,
+    handle_request_cb, http,
     MHD_OPTION_EXTERNAL_LOGGER, log_cb, NULL,
     MHD_OPTION_CONNECTION_LIMIT, 1,
     MHD_OPTION_CONNECTION_TIMEOUT, 10,

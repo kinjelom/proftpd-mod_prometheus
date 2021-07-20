@@ -75,4 +75,7 @@ array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
 int prom_db_reindex(pool *p, struct prom_dbh *dbh,
   const char *index_name, const char **errstr);
 
+/* Obtain the ROWID for the last inserted row. */
+int prom_db_last_row_id(pool *p, struct prom_dbh *dbh, int64_t *row_id);
+
 #endif /* MOD_PROMETHEUS_DB_H */

@@ -26,10 +26,12 @@
 #define MOD_PROMETHEUS_HTTP_H
 
 #include "mod_prometheus.h"
+#include "prometheus/registry.h"
 
 struct prom_http;
 
-struct prom_http *prom_http_start(pool *p, unsigned short http_port);
+struct prom_http *prom_http_start(pool *p, unsigned short http_port,
+  struct prom_registry *registry);
 
 /* This function will exit once the exporter finishes. */
 int prom_http_run_loop(pool *p, struct prom_http *http);

@@ -33,4 +33,9 @@ struct prom_dbh *prom_metric_db_open(pool *p, const char *tables_path);
 struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
   int flags);
 
+int prom_metric_db_add_metric(pool *p, struct prom_dbh *dbh,
+  const char *metric_name);
+int prom_metric_db_exists_metric(pool *p, struct prom_dbh *dbh,
+  const char *metric_name);
+
 #endif /* MOD_PROMETHEUS_METRIC_DB_H */

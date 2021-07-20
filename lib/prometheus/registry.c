@@ -28,13 +28,26 @@
 
 struct prom_registry {
   pool *pool;
+  const char *name;
   pr_table_t *metrics;
 };
 
 static const char *trace_channel = "prometheus.registry";
 
-const void *prom_registry_get_metric(struct prom_registry *registry,
-    const char *metric_name) {
+int prom_registry_add_metric(struct prom_registry *registry,
+    struct prom_metric *metric) {
+  if (registry == NULL ||
+      metric == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
+const struct prom_metric *prom_registry_get_metric(
+    struct prom_registry *registry, const char *metric_name) {
   if (registry == NULL ||
       metric_name == NULL) {
     errno = EINVAL;
@@ -44,23 +57,56 @@ const void *prom_registry_get_metric(struct prom_registry *registry,
   return pr_table_get(registry->metrics, metric_name, NULL);
 }
 
+const char *prom_registry_get_name(struct prom_registry *registry) {
+  if (registry == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  return registry->name;
+}
+
 /* Returns the text for all metrics in the registry. */
 const char *prom_registry_get_text(pool *p, struct prom_registry *registry) {
+  const char *text;
+
   if (p == NULL ||
       registry == NULL) {
     errno = EINVAL;
     return NULL;
   }
 
-  errno = ENOSYS;
-  return NULL;
+  text = pstrcat(p, "OK\n\n", NULL);
+  return text;
 }
 
-struct prom_registry *prom_registry_init(pool *p) {
+/* XXX Once all metrics have been created, registered, call
+ * prom_registry_sort_metrics().
+ *
+ * Why?  We ideally want to return all metrics in sorted order, every time
+ * we are scraped.  So doing a one-time ordering of the list/keys is best.
+ * Plus it will help with lookups.
+ *
+ * Since we're dealing with a table, maybe it's easiest to get the keys,
+ * sort them, and cache the sorted key list in the registry handle?
+ */
+int prom_registry_sort_metrics(pool *p, struct prom_registry *registry) {
+  if (p == NULL ||
+      registry == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
+}
+
+struct prom_registry *prom_registry_init(pool *p, const char *name) {
   struct prom_registry *registry;
   pool *registry_pool;
 
-  if (p == NULL) {
+  if (p == NULL ||
+      name == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -70,6 +116,7 @@ struct prom_registry *prom_registry_init(pool *p) {
 
   registry = pcalloc(registry_pool, sizeof(struct prom_registry));
   registry->pool = registry_pool;
+  registry->name = pstrdup(registry->pool, name);
   registry->metrics = pr_table_nalloc(registry->pool, 0, 8);
 
   return registry;

@@ -39,12 +39,9 @@ static void set_up(void) {
   }
 
   mark_point();
-  prometheus_registry_init(p);
 }
 
 static void tear_down(void) {
-  prometheus_registry_free();
-
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("prometheus.registry", 0, 0);
   }
@@ -55,6 +52,43 @@ static void tear_down(void) {
   }
 }
 
+START_TEST (registry_free_test) {
+  int res;
+
+  mark_point();
+  res = prom_registry_free(NULL);
+  fail_unless(res < 0, "Failed to handle null registry");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (registry_init_test) {
+  int res;
+  struct prom_registry *registry;
+
+  mark_point();
+  registry = prom_registry_init(NULL, NULL);
+  fail_unless(registry == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  registry = prom_registry_init(p, NULL);
+  fail_unless(registry == NULL, "Failed to handle null name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  registry = prom_registry_init(p, "test");
+  fail_unless(registry != NULL, "Failed to create registry: %s",
+    strerror(errno));
+
+  res = prom_registry_free(registry);
+  fail_unless(res == 0, "Failed to free registry: %s", strerror(errno));
+}
+END_TEST
+
 Suite *tests_get_registry_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -63,6 +97,9 @@ Suite *tests_get_registry_suite(void) {
   testcase = tcase_create("base");
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  tcase_add_test(testcase, registry_free_test);
+  tcase_add_test(testcase, registry_init_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

@@ -24,7 +24,7 @@
 
 /* Metric database API tests. */
 
-#include "tests.h"
+#include "../tests.h"
 #include "prometheus/db.h"
 #include "prometheus/metric.h"
 #include "prometheus/metric/db.h"

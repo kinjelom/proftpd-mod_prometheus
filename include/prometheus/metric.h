@@ -26,9 +26,18 @@
 #define MOD_PROMETHEUS_METRIC_H
 
 #include "mod_prometheus.h"
-#include "prometheus/registry.h"
+#include "prometheus/db.h"
 
 struct prom_metric;
+
+struct prom_metric *prom_metric_create(pool *p, const char *name,
+  struct prom_dbh *dbh);
+int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
+  const char *help_text);
+int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
+  const char *help_text);
+
+int prom_metric_destroy(pool *p, struct prom_metric *metric);
 
 /* Returns the metric name. */
 const char *prom_metric_get_name(struct prom_metric *metric);
@@ -36,24 +45,25 @@ const char *prom_metric_get_name(struct prom_metric *metric);
 /* Returns the text for the metric. */
 const char *prom_metric_get_text(pool *p, struct prom_metric *metric);
 
-/* XXX Should we use a table for labels, rather than a list?  The
- * prometheus-client-c code made some naive assumptions about label keys at
- * metric creation time, and ordering of label values at metric sampling time.
- * I guess it depends on how much you trust the code; mod_prometheus can
- * use those same assumptions, since it's NOT a library.  However, this
- * naive approach does not handle cases of new labels added only at sampling
- * time -- that's the problem, and why using a table is probably better.
+/* Decrement the specified metric by the given `decr`; applies to any
+ * gauge records associated with this metric.
  */
+int prom_metric_decr(const struct prom_metric *metric, uint32_t decr,
+  pr_table_t *labels);
 
-/* Increment the specified metric ID. */
-int prom_metric_incr_value(pool *p, const struct prom_metric *metric,
-  int32_t incr, pr_table_t *labels);
+/* Increment the specified metric by the given `incr`; applies to any
+ * counter/gauge records associated with this metric.
+ */
+int prom_metric_incr(const struct prom_metric *metric, uint32_t incr,
+  pr_table_t *labels);
 
-struct prom_metric *prom_metric_create(pool *p, const char *name);
-int prom_metric_destroy(pool *p, struct prom_metric *metric);
+/* Setl the specified metric by the given `val`; applies to any
+ * gauge records associated with this metric.
+ */
+int prom_metric_set(const struct prom_metric *metric, uint32_t val,
+  pr_table_t *labels);
 
-int prom_metric_init(pool *p, const char *tables_path,
-  struct prom_registry *registry);
+struct prom_dbh *prom_metric_init(pool *p, const char *tables_path);
 int prom_metric_free(pool *p);
 
 #endif /* MOD_PROMETHEUS_METRIC_H */

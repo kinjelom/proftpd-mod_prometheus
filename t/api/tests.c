@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
   srunner_set_log(runner, log_file);
 
   requested = getenv("PROMETHEUS_TEST_SUITE");
-  if (requested) {
+  if (requested != NULL) {
     Suite *suite;
 
     suite = tests_get_suite(requested);

@@ -115,6 +115,40 @@ int tests_rmpath(pool *p, const char *path) {
   return res;
 }
 
+int pr_config_get_server_xfer_bufsz(int direction) {
+  int bufsz = -1;
+
+  switch (direction) {
+    case PR_NETIO_IO_RD:
+      bufsz = PR_TUNABLE_DEFAULT_RCVBUFSZ;
+      break;
+
+    case PR_NETIO_IO_WR:
+      bufsz = PR_TUNABLE_DEFAULT_SNDBUFSZ;
+      break;
+
+    default:
+      errno = EINVAL;
+      return -1;
+  }
+
+  return bufsz;
+}
+
+void pr_log_auth(int priority, const char *fmt, ...) {
+  if (getenv("TEST_VERBOSE") != NULL) {
+    va_list msg;
+
+    fprintf(stderr, "AUTH: ");
+
+    va_start(msg, fmt);
+    vfprintf(stderr, fmt, msg);
+    va_end(msg);
+
+    fprintf(stderr, "\n");
+  }
+}
+
 void pr_log_debug(int level, const char *fmt, ...) {
   if (getenv("TEST_VERBOSE") != NULL) {
     va_list msg;
@@ -197,6 +231,13 @@ int pr_log_writefile(int fd, const char *name, const char *fmt, ...) {
   }
 
   return 0;
+}
+
+void pr_session_disconnect(module *m, int reason_code, const char *details) {
+}
+
+const char *pr_session_get_protocol(int flags) {
+  return "ftp";
 }
 
 void pr_signals_handle(void) {
