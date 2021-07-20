@@ -122,6 +122,61 @@ START_TEST (db_open_test) {
 }
 END_TEST
 
+START_TEST (db_open_readonly_test) {
+  int res;
+  const char *table_path, *schema_name;
+  struct prom_dbh *dbh;
+
+  mark_point();
+  dbh = prom_db_open_readonly(NULL, NULL, NULL);
+  fail_unless(dbh == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_db_open_readonly(p, NULL, NULL);
+  fail_unless(dbh == NULL, "Failed to handle null table path");
+  fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
+    strerror(errno), errno);
+
+  (void) unlink(db_test_table);
+  table_path = db_test_table;
+  schema_name = "prometheus_test";
+
+  mark_point();
+  dbh = prom_db_open_readonly(p, table_path, NULL);
+  fail_unless(dbh == NULL, "Failed to handle null schema name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_db_open_readonly(p, table_path, schema_name);
+  fail_unless(dbh == NULL, "Failed to handle missing table");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s': %s", table_path, schema_name,
+    strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  mark_point();
+  dbh = prom_db_open_readonly(p, table_path, schema_name);
+  fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
+    strerror(errno));
+
+  mark_point();
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close table '%s': %s", table_path,
+    strerror(errno));
+  (void) unlink(db_test_table);
+}
+END_TEST
+
 START_TEST (db_open_with_version_test) {
   int res, flags = 0;
   struct prom_dbh *dbh;
@@ -216,6 +271,121 @@ START_TEST (db_open_with_version_test) {
   schema_version = 99;
   dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
     flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  (void) unlink(db_test_table);
+}
+END_TEST
+
+START_TEST (db_open_readonly_with_version_test) {
+  int res, flags = 0;
+  struct prom_dbh *dbh;
+  const char *table_path, *schema_name;
+  unsigned int schema_version;
+
+  mark_point();
+  dbh = prom_db_open_readonly_with_version(NULL, NULL, NULL, 0, 0);
+  fail_unless(dbh == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Failed to set errno to EINVAL, got %s (%d)",
+    strerror(errno), errno);
+
+  (void) unlink(db_test_table);
+  table_path = db_test_table;
+  schema_name = "prometheus_test";
+  schema_version = 0;
+
+  mark_point();
+  dbh = prom_db_open_with_version(p, table_path, schema_name, schema_version,
+    flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  mark_point();
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  flags |= PROM_DB_OPEN_FL_INTEGRITY_CHECK;
+
+  mark_point();
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  if (getenv("CI") == NULL &&
+      getenv("TRAVIS") == NULL) {
+    /* Enable the vacuuming for these tests. */
+    flags |= PROM_DB_OPEN_FL_VACUUM;
+
+    mark_point();
+    dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+      schema_version, flags);
+    fail_unless(dbh != NULL,
+      "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+      schema_name, schema_version, strerror(errno));
+
+    res = prom_db_close(p, dbh);
+    fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+    flags &= ~PROM_DB_OPEN_FL_VACUUM;
+  }
+
+  flags &= ~PROM_DB_OPEN_FL_INTEGRITY_CHECK;
+
+  mark_point();
+  schema_version = 76;
+  flags |= PROM_DB_OPEN_FL_SCHEMA_VERSION_CHECK|PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
+  fail_unless(dbh == NULL, "Opened table with version skew unexpectedly");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  flags &= ~PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW;
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  mark_point();
+  schema_version = 76;
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
+  fail_unless(dbh != NULL,
+    "Failed to open table '%s', schema '%s', version %u: %s", table_path,
+    schema_name, schema_version, strerror(errno));
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close databas: %s", strerror(errno));
+
+  mark_point();
+  schema_version = 99;
+  dbh = prom_db_open_readonly_with_version(p, table_path, schema_name,
+    schema_version, flags);
   fail_unless(dbh != NULL,
     "Failed to open table '%s', schema '%s', version %u: %s", table_path,
     schema_name, schema_version, strerror(errno));
@@ -425,6 +595,7 @@ START_TEST (db_bind_stmt_test) {
   struct prom_dbh *dbh;
   int idx, int_val;
   long long_val;
+  double double_val;
   char *text_val;
 
   mark_point();
@@ -501,6 +672,14 @@ START_TEST (db_bind_stmt_test) {
   long_val = 7;
   res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_LONG,
     &long_val);
+  fail_unless(res < 0, "Failed to handle invalid index value");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  double_val = 7.0;
+  res = prom_db_bind_stmt(p, dbh, stmt, idx, PROM_DB_BIND_TYPE_DOUBLE,
+    &double_val);
   fail_unless(res < 0, "Failed to handle invalid index value");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got '%s' (%d)", EPERM,
     strerror(errno), errno);
@@ -705,7 +884,9 @@ Suite *tests_get_db_suite(void) {
 
   tcase_add_test(testcase, db_close_test);
   tcase_add_test(testcase, db_open_test);
+  tcase_add_test(testcase, db_open_readonly_test);
   tcase_add_test(testcase, db_open_with_version_test);
+  tcase_add_test(testcase, db_open_readonly_with_version_test);
   tcase_add_test(testcase, db_exec_stmt_test);
   tcase_add_test(testcase, db_prepare_stmt_test);
   tcase_add_test(testcase, db_finish_stmt_test);

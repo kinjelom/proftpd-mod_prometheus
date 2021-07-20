@@ -39,10 +39,10 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
   /* CREATE TABLE metrics (
    *   metric_id INTEGER NOT NULL PRIMARY KEY,
    *   metric_name TEXT NOT NULL,
-   *   metric_labels TEXT
+   *   metric_type INTEGER NOT NULL
    * );
    */
-  stmt = "CREATE TABLE IF NOT EXISTS metrics (metric_id INTEGER NOT NULL PRIMARY KEY, metric_name TEXT NOT NULL, metric_labels TEXT);";
+  stmt = "CREATE TABLE IF NOT EXISTS metrics (metric_id INTEGER NOT NULL PRIMARY KEY, metric_name TEXT NOT NULL, metric_type INTEGER NOT NULL);";
   res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -61,14 +61,15 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
-  /* CREATE TABLE samples (
+  /* CREATE TABLE metric_samples (
    *   sample_id INTEGER NOT NULL PRIMARY KEY,
    *   metric_id INTEGER NOT NULL,
-   *   sample_value FLOAT NOT NULL,
+   *   sample_value DOUBLE NOT NULL,
+   *   sample_labels TEXT DEFAULT NULL,
    *   FOREIGN KEY (metric_id) REFERENCES metrics (metric_id)
    * );
    */
-  stmt = "CREATE TABLE IF NOT EXISTS samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value FLOAT NOT NULL, FOREIGN KEY (metric_id) REFERENCES metrics (metric_id));";
+  stmt = "CREATE TABLE IF NOT EXISTS metric_samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value DOUBLE NOT NULL, sample_labels TEXT DEFAULT NULL, FOREIGN KEY (metric_id) REFERENCES metrics (metric_id));";
   res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -78,7 +79,7 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
   }
 
   /* CREATE INDEX sample_id_idx */
-  stmt = "CREATE INDEX IF NOT EXISTS sample_id_idx ON samples (sample_id);";
+  stmt = "CREATE INDEX IF NOT EXISTS sample_id_idx ON metric_samples (sample_id);";
   res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -94,7 +95,7 @@ static int metrics_db_truncate_tables(pool *p, struct prom_dbh *dbh) {
   int res;
   const char *index_name, *stmt, *errstr = NULL;
 
-  stmt = "DELETE FROM samples;";
+  stmt = "DELETE FROM metric_samples;";
   res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -135,8 +136,12 @@ static int metrics_db_truncate_tables(pool *p, struct prom_dbh *dbh) {
   return 0;
 }
 
-int prom_metric_db_add_metric(pool *p, struct prom_dbh *dbh,
-    const char *metric_name) {
+int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
+    const char *metric_name, int metric_type, int64_t *row_id) {
+  int res;
+  const char *stmt, *errstr = NULL;
+  array_header *results;
+
   if (p == NULL ||
       dbh == NULL ||
       metric_name == NULL) {
@@ -144,12 +149,50 @@ int prom_metric_db_add_metric(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
-  errno = ENOSYS;
-  return -1;
+  stmt = "INSERT INTO metrics (metric_name, metric_type) VALUES (?, ?);";
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
+    (void *) metric_name);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_INT,
+    (void *) &metric_type);
+  if (res < 0) {
+    return -1;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return -1;
+  }
+
+  if (row_id != NULL) {
+    res = prom_db_last_row_id(p, dbh, row_id);
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 7,
+        "error obtaining last row ID for metric '%s', type %d: %s",
+        metric_name, metric_type, strerror(errno));
+    }
+  }
+
+  return 0;
 }
 
-int prom_metric_db_exists_metric(pool *p, struct prom_dbh *dbh,
+int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
     const char *metric_name) {
+  int res;
+  const char *stmt, *errstr = NULL;
+  array_header *results;
+
   if (p == NULL ||
       dbh == NULL ||
       metric_name == NULL) {
@@ -157,8 +200,277 @@ int prom_metric_db_exists_metric(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
-  errno = ENOSYS;
-  return -1;
+  stmt = "SELECT metric_id FROM metrics WHERE metric_name = ?;";
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_TEXT,
+    (void *) metric_name);
+  if (res < 0) {
+    return -1;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return -1;
+  }
+
+  if (results->nelts == 0) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  return 0;
+}
+
+int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
+    int64_t metric_id, const char *sample_labels) {
+  int res;
+  const char *stmt, *errstr = NULL;
+  array_header *results;
+
+  if (sample_labels != NULL) {
+    stmt = "SELECT sample_value FROM metric_samples WHERE metric_id = ? AND sample_labels = ?;";
+
+  } else {
+    stmt = "SELECT sample_value FROM metric_samples WHERE metric_id = ? AND sample_labels IS NULL;";
+  }
+
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_INT,
+    (void *) &metric_id);
+  if (res < 0) {
+    return -1;
+  }
+
+  if (sample_labels != NULL) {
+    res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_TEXT,
+      (void *) sample_labels);
+  }
+
+  if (res < 0) {
+    return -1;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return -1;
+  }
+
+  if (results->nelts == 0) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  return 0;
+}
+
+static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
+    double sample_val, const char *sample_labels) {
+  int res;
+  const char *stmt, *errstr = NULL;
+  array_header *results;
+
+  if (sample_labels != NULL) {
+    stmt = "INSERT INTO metric_samples (metric_id, sample_value, sample_labels) VALUES (?, ?, ?);";
+
+  } else {
+    stmt = "INSERT INTO metric_samples (metric_id, sample_value) VALUES (?, ?);";
+  }
+
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_INT,
+    (void *) &metric_id);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_DOUBLE,
+    (void *) &sample_val);
+  if (res < 0) {
+    return -1;
+  }
+
+  if (sample_labels != NULL) {
+    res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
+      (void *) &sample_labels);
+  }
+
+  if (res < 0) {
+    return -1;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
+    int64_t metric_id, double sample_val, const char *sample_labels) {
+  int res;
+  const char *errstr = NULL;
+  array_header *results;
+
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_DOUBLE,
+    (void *) &sample_val);
+  if (res < 0) {
+    return -1;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_INT,
+    (void *) &metric_id);
+  if (res < 0) {
+    return -1;
+  }
+
+  if (sample_labels != NULL) {
+    res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
+      (void *) &sample_labels);
+  }
+
+  if (res < 0) {
+    return -1;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+int prom_metric_db_sample_decr(pool *p, struct prom_dbh *dbh,
+    int64_t metric_id, double sample_val, const char *sample_labels) {
+  int res;
+  const char *stmt;
+
+  /* NOTE: Beware of race conditions with other processes, due to this
+   * check-and-set sequence, for this sample.
+   *
+   * Consider using wrapping this in a BEGIN/COMMIT block; use EXCLUSIVE?
+   */
+  res = prom_metric_db_sample_exists(p, dbh, metric_id, sample_labels);
+  if (res < 0) {
+    double init_val = 0.0;
+
+    if (errno != ENOENT) {
+      return -1;
+    }
+
+    res = db_sample_create(p, dbh, metric_id, init_val, sample_labels);
+    if (res < 0) {
+      return -1;
+    }
+  }
+
+  if (sample_labels != NULL) {
+    stmt = "UPDATE metric_samples SET sample_value = sample_value - ? WHERE metric_id = ? AND sample_labels = ?;";
+
+  } else {
+    stmt = "UPDATE metric_samples SET sample_value = sample_value - ? WHERE metric_id = ? AND sample_labels IS NULL;";
+  }
+
+  return db_sample_adj(p, dbh, stmt, metric_id, sample_val, sample_labels);
+}
+
+int prom_metric_db_sample_incr(pool *p, struct prom_dbh *dbh,
+    int64_t metric_id, double sample_val, const char *sample_labels) {
+  int res;
+  const char *stmt;
+
+  /* NOTE: Beware of race conditions with other processes, due to this
+   * check-and-set sequence, for this sample.
+   *
+   * Consider using wrapping this in a BEGIN/COMMIT block; use EXCLUSIVE?
+   */
+  res = prom_metric_db_sample_exists(p, dbh, metric_id, sample_labels);
+  if (res < 0) {
+    double init_val = 0.0;
+
+    if (errno != ENOENT) {
+      return -1;
+    }
+
+    res = db_sample_create(p, dbh, metric_id, init_val, sample_labels);
+    if (res < 0) {
+      return -1;
+    }
+  }
+
+  if (sample_labels != NULL) {
+    stmt = "UPDATE metric_samples SET sample_value = sample_value + ? WHERE metric_id = ? AND sample_labels = ?;";
+
+  } else {
+    stmt = "UPDATE metric_samples SET sample_value = sample_value + ? WHERE metric_id = ? AND sample_labels IS NULL;";
+  }
+
+  return db_sample_adj(p, dbh, stmt, metric_id, sample_val, sample_labels);
+}
+
+array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
+    int64_t metric_id) {
+  int res;
+  const char *stmt, *errstr = NULL;
+  array_header *results;
+
+  if (p == NULL |
+      dbh == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  stmt = "SELECT sample_value, sample_labels FROM metric_samples WHERE metric_id = ?;";
+  res = prom_db_prepare_stmt(p, dbh, stmt);
+  if (res < 0) {
+    return NULL;
+  }
+
+  res = prom_db_bind_stmt(p, dbh, stmt, 1, PROM_DB_BIND_TYPE_INT,
+    (void *) &metric_id);
+  if (res < 0) {
+    return NULL;
+  }
+
+  results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  if (results == NULL) {
+    pr_trace_msg(trace_channel, 7,
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+    errno = EPERM;
+    return NULL;
+  }
+
+  return results;
 }
 
 int prom_metric_db_close(pool *p, struct prom_dbh *dbh) {
@@ -185,6 +497,12 @@ struct prom_dbh *prom_metric_db_open(pool *p, const char *tables_path) {
   struct prom_dbh *dbh;
   const char *db_path;
 
+  if (p == NULL ||
+      tables_path == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   db_path = pdircat(p, tables_path, "metrics.db", NULL);
 
   /* Make sure we have our own per-session database handle, per SQLite3
@@ -192,8 +510,8 @@ struct prom_dbh *prom_metric_db_open(pool *p, const char *tables_path) {
    */
 
   PRIVS_ROOT
-  dbh = prom_db_open_with_version(p, db_path, PROM_METRICS_DB_SCHEMA_NAME,
-    PROM_METRICS_DB_SCHEMA_VERSION, 0);
+  dbh = prom_db_open_readonly_with_version(p, db_path,
+    PROM_METRICS_DB_SCHEMA_NAME, PROM_METRICS_DB_SCHEMA_VERSION, 0);
   xerrno = errno;
   PRIVS_RELINQUISH
 
@@ -215,7 +533,8 @@ struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
   const char *db_path = NULL;
   struct prom_dbh *dbh;
 
-  if (tables_path == NULL) {
+  if (p == NULL ||
+      tables_path == NULL) {
     errno = EINVAL;
     return NULL;
   }

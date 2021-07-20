@@ -36,6 +36,10 @@ int prom_db_free(void);
 struct prom_dbh *prom_db_open(pool *p, const char *table_path,
   const char *schema_name);
 
+/* Open the existing database (with the given schema name) at the given path. */
+struct prom_dbh *prom_db_open_readonly(pool *p, const char *table_path,
+  const char *schema_name);
+
 /* Create/prepare the database (with the given schema name) at the given path.
  * If the database/schema already exists, check that its schema version is
  * greater than or equal to the given minimum version.  If not, delete that
@@ -49,6 +53,14 @@ struct prom_dbh *prom_db_open_with_version(pool *p, const char *table_path,
 #define PROM_DB_OPEN_FL_VACUUM				0x008
 #define PROM_DB_OPEN_FL_SKIP_VACUUM			0x010
 
+/* Open the existing database (with the given schema name) at the given path.
+ * If the database/schema already exists, check that its schema version is
+ * greater than or equal to the given minimum version.
+ */
+struct prom_dbh *prom_db_open_readonly_with_version(pool *p,
+  const char *table_path, const char *schema_name, unsigned int schema_version,
+  int flags);
+
 /* Close the database. */
 int prom_db_close(pool *p, struct prom_dbh *dbh);
 
@@ -58,8 +70,9 @@ int prom_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt, int idx,
   int type, void *data);
 #define PROM_DB_BIND_TYPE_INT		1
 #define PROM_DB_BIND_TYPE_LONG		2
-#define PROM_DB_BIND_TYPE_TEXT		3
-#define PROM_DB_BIND_TYPE_NULL		4
+#define PROM_DB_BIND_TYPE_DOUBLE	3
+#define PROM_DB_BIND_TYPE_TEXT		4
+#define PROM_DB_BIND_TYPE_NULL		5
 
 /* Executes the given statement.  Assumes that the caller is not using a SELECT,
  * and/or is uninterested in the statement results.

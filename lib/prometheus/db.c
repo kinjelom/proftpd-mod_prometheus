@@ -64,12 +64,12 @@ static int db_busy(void *user_data, int busy_count) {
   /* If we're busy, then sleep for a short while, on the assumption that the
    * other process will finish its business with our tables.
    */
-  (void) pr_timer_usleep(PROM_DB_SQLITE_MAX_RETRY_DELAY_MS);
+  (void) pr_timer_usleep(PROM_DB_SQLITE_MAX_RETRY_DELAY_MS * 1000);
 
   return retry;
 }
 
-#ifdef SQLITE_CONFIG_LOG
+#if defined(SQLITE_CONFIG_LOG)
 static void db_err(void *user_data, int err_code, const char *err_msg) {
   if (current_schema != NULL) {
     pr_trace_msg(trace_channel, 1, "(sqlite3): schema '%s': [error %d] %s",
@@ -82,7 +82,7 @@ static void db_err(void *user_data, int err_code, const char *err_msg) {
 }
 #endif /* SQLITE_CONFIG_LOG */
 
-#ifdef SQLITE_CONFIG_SQLLOG
+#if defined(SQLITE_CONFIG_SQLLOG)
 static void db_sql(void *user_data, sqlite3 *db, const char *info,
     int event_type) {
   switch (event_type) {
@@ -146,14 +146,6 @@ static int db_trace2(unsigned int trace_type, void *user_data, void *ptr,
       ns = *((int64_t *) ptr_data);
       expanded_sql = sqlite3_expanded_sql(pstmt);
 
-      /* There are some SQL statements whose values we do NOT want to log.
-       * Thus we have a hacky way to look for them.  Sigh.
-       */
-      if (expanded_sql != NULL &&
-          strstr(expanded_sql, "SSL SESSION PARAMETERS") != NULL) {
-        expanded_sql = "(full SQL statement redacted)";
-      }
-
       if (schema_name == NULL) {
         pr_trace_msg(trace_channel, PROM_DB_SQLITE_TRACE_LEVEL,
           "(sqlite3): stmt '%s' ran for %lu nanosecs", expanded_sql,
@@ -174,14 +166,6 @@ static int db_trace2(unsigned int trace_type, void *user_data, void *ptr,
 
       pstmt = ptr;
       expanded_sql = sqlite3_expanded_sql(pstmt);
-
-      /* There are some SQL statements whose values we do NOT want to log.
-       * Thus we have a hacky way to look for them.  Sigh.
-       */
-      if (expanded_sql != NULL &&
-          strstr(expanded_sql, "SSL SESSION PARAMETERS") != NULL) {
-        expanded_sql = "(full SQL statement redacted)";
-      }
 
       if (schema_name == NULL) {
         pr_trace_msg(trace_channel, PROM_DB_SQLITE_TRACE_LEVEL,
@@ -439,6 +423,26 @@ int prom_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
       break;
     }
 
+    case PROM_DB_BIND_TYPE_DOUBLE: {
+      double d;
+
+      if (data == NULL) {
+        errno = EINVAL;
+        return -1;
+      }
+
+      d = *((double *) data);
+      res = sqlite3_bind_double(pstmt, idx, d);
+      if (res != SQLITE_OK) {
+        pr_trace_msg(trace_channel, 4,
+          "error binding parameter %d of '%s' to DOUBLE %0.3f: %s", idx, stmt,
+          d, sqlite3_errmsg(dbh->db));
+        errno = EPERM;
+        return -1;
+      }
+      break;
+    }
+
     case PROM_DB_BIND_TYPE_TEXT: {
       const char *text;
 
@@ -546,7 +550,7 @@ array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
   current_schema = dbh->schema;
 
   /* The sqlit3_stmt_readonly() function first appeared in SQLite 3.7.x. */
-#ifdef HAVE_SQLITE3_STMT_READONLY
+#if defined(HAVE_SQLITE3_STMT_READONLY)
   readonly = sqlite3_stmt_readonly(pstmt);
 #else
   readonly = FALSE;
@@ -603,7 +607,8 @@ array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
       val = pstrdup(p, (const char *) sqlite3_column_text(pstmt, i));
 
       pr_trace_msg(trace_channel, 17,
-        "column %s [%u]: %s", sqlite3_column_name(pstmt, i), i, val);
+        "column %s [%u]: %s", sqlite3_column_name(pstmt, i), i,
+        val != NULL ? val : "NULL");
       *((char **) push_array(results)) = val;
     }
 
@@ -633,9 +638,9 @@ array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
 
 /* Database opening/closing. */
 
-struct prom_dbh *prom_db_open(pool *p, const char *table_path,
-    const char *schema_name) {
-  int res, flags;
+static struct prom_dbh *db_open(pool *p, const char *table_path,
+    const char *schema_name, int flags) {
+  int res;
   pool *sub_pool;
   const char *stmt;
   sqlite3 *db = NULL;
@@ -651,8 +656,7 @@ struct prom_dbh *prom_db_open(pool *p, const char *table_path,
   pr_trace_msg(trace_channel, 19, "attempting to open %s tables at path '%s'",
     schema_name, table_path);
 
-  flags = SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE;
-#ifdef SQLITE_OPEN_PRIVATECACHE
+#if defined(SQLITE_OPEN_PRIVATECACHE)
   /* By default, disable the shared cache mode. */
   flags |= SQLITE_OPEN_PRIVATECACHE;
 #endif
@@ -712,6 +716,22 @@ struct prom_dbh *prom_db_open(pool *p, const char *table_path,
   pr_trace_msg(trace_channel, 9, "opened SQLite table '%s'", table_path);
 
   return dbh;
+}
+
+struct prom_dbh *prom_db_open(pool *p, const char *table_path,
+    const char *schema_name) {
+  int flags;
+
+  flags = SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE;
+  return db_open(p, table_path, schema_name, flags);
+}
+
+struct prom_dbh *prom_db_open_readonly(pool *p, const char *table_path,
+    const char *schema_name) {
+  int flags;
+
+  flags = SQLITE_OPEN_READONLY;
+  return db_open(p, table_path, schema_name, flags);
 }
 
 static int get_schema_version(pool *p, struct prom_dbh *dbh,
@@ -936,6 +956,70 @@ struct prom_dbh *prom_db_open_with_version(pool *p, const char *table_path,
   return dbh;
 }
 
+struct prom_dbh *prom_db_open_readonly_with_version(pool *p,
+    const char *table_path, const char *schema_name,
+    unsigned int schema_version, int flags) {
+  pool *tmp_pool = NULL;
+  struct prom_dbh *dbh = NULL;
+  int res = 0, xerrno = 0;
+  unsigned int current_version = 0;
+
+  dbh = prom_db_open_readonly(p, table_path, schema_name);
+  if (dbh == NULL) {
+    return NULL;
+  }
+
+  if (flags & PROM_DB_OPEN_FL_SCHEMA_VERSION_CHECK) {
+    pr_trace_msg(trace_channel, 19,
+      "ensuring that schema at path '%s' has at least schema version %u",
+      table_path, schema_version);
+
+    tmp_pool = make_sub_pool(p);
+    res = get_schema_version(tmp_pool, dbh, schema_name, &current_version);
+      if (res < 0) {
+      xerrno = errno;
+
+      prom_db_close(p, dbh);
+      destroy_pool(tmp_pool);
+      errno = xerrno;
+      return NULL;
+    }
+
+    if (current_version >= schema_version) {
+      pr_trace_msg(trace_channel, 11,
+        "schema version %u >= desired version %u for path '%s'",
+        current_version, schema_version, table_path);
+
+      check_db_integrity(tmp_pool, dbh, flags);
+      destroy_pool(tmp_pool);
+
+      return dbh;
+    }
+
+    if (flags & PROM_DB_OPEN_FL_ERROR_ON_SCHEMA_VERSION_SKEW) {
+      pr_trace_msg(trace_channel, 5,
+        "schema version %u < desired version %u for path '%s', failing",
+        current_version, schema_version, table_path);
+      prom_db_close(p, dbh);
+      destroy_pool(tmp_pool);
+      errno = EPERM;
+      return NULL;
+    }
+
+  } else {
+    check_db_integrity(tmp_pool, dbh, flags);
+  }
+
+  destroy_pool(tmp_pool);
+
+  if (res < 0) {
+    errno = xerrno;
+    return NULL;
+  }
+
+  return dbh;
+}
+
 int prom_db_close(pool *p, struct prom_dbh *dbh) {
   pool *tmp_pool;
   sqlite3_stmt *pstmt;
@@ -1032,12 +1116,12 @@ int prom_db_init(pool *p) {
     return -1;
   }
 
-#ifdef SQLITE_CONFIG_LOG
+#if defined(SQLITE_CONFIG_LOG)
   /* Register an error logging callback with SQLite3. */
   sqlite3_config(SQLITE_CONFIG_LOG, db_err, NULL);
 #endif /* SQLITE_CONFIG_LOG */
 
-#ifdef SQLITE_CONFIG_SQLLOG
+#if defined(SQLITE_CONFIG_SQLLOG)
   sqlite3_config(SQLITE_CONFIG_SQLLOG, db_sql, NULL);
 #endif /* SQLITE_CONFIG_SQLLOG */
 

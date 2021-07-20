@@ -98,6 +98,7 @@ int prom_metric_set(const struct prom_metric *metric, uint32_t val,
 int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
     const char *help_text) {
   int res;
+  int64_t counter_id;
 
   if (metric == NULL ||
       help_text == NULL) {
@@ -113,8 +114,7 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
     metric->counter_name = metric->name;
   }
 
-  res = prom_metric_db_exists_metric(metric->pool, metric->dbh,
-    metric->counter_name);
+  res = prom_metric_db_exists(metric->pool, metric->dbh, metric->counter_name);
   if (res == 0) {
     pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
       metric->counter_name);
@@ -122,8 +122,8 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
     return -1;
   }
 
-  res = prom_metric_db_add_metric(metric->pool, metric->dbh,
-    metric->counter_name);
+  res = prom_metric_db_create(metric->pool, metric->dbh, metric->counter_name,
+    PROM_METRIC_TYPE_COUNTER, &counter_id);
   if (res < 0) {
     pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
       metric->counter_name, strerror(errno));
@@ -131,18 +131,14 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
     return -1;
   }
 
-  res = prom_db_last_row_id(metric->pool, metric->dbh, &(metric->counter_id));
-  if (res < 0) {
-    pr_trace_msg(trace_channel, 3, "error obtaining '%s' metric row ID: %s",
-      metric->counter_name, strerror(errno));
-  }
-
+  metric->counter_id = counter_id;
   return 0;
 }
 
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
     const char *help_text) {
   int res;
+  int64_t gauge_id;
 
   if (metric == NULL ||
       help_text == NULL) {
@@ -158,8 +154,7 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
     metric->gauge_name = metric->name;
   }
 
-  res = prom_metric_db_exists_metric(metric->pool, metric->dbh,
-    metric->gauge_name);
+  res = prom_metric_db_exists(metric->pool, metric->dbh, metric->gauge_name);
   if (res == 0) {
     pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
       metric->gauge_name);
@@ -167,8 +162,8 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
     return -1;
   }
 
-  res = prom_metric_db_add_metric(metric->pool, metric->dbh,
-    metric->gauge_name);
+  res = prom_metric_db_create(metric->pool, metric->dbh, metric->gauge_name,
+    PROM_METRIC_TYPE_GAUGE, &gauge_id);
   if (res < 0) {
     pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
       metric->gauge_name, strerror(errno));
@@ -176,12 +171,7 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
     return -1;
   }
 
-  res = prom_db_last_row_id(metric->pool, metric->dbh, &(metric->gauge_id));
-  if (res < 0) {
-    pr_trace_msg(trace_channel, 3, "error obtaining '%s' metric row ID: %s",
-      metric->gauge_name, strerror(errno));
-  }
-
+  metric->gauge_id = gauge_id;
   return 0;
 }
 

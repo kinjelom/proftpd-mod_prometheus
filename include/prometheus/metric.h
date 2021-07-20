@@ -32,6 +32,11 @@ struct prom_metric;
 
 struct prom_metric *prom_metric_create(pool *p, const char *name,
   struct prom_dbh *dbh);
+
+#define PROM_METRIC_TYPE_COUNTER	1
+#define PROM_METRIC_TYPE_GAUGE		2
+#define PROM_METRIC_TYPE_HISTOGRAM	3
+
 int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   const char *help_text);
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,

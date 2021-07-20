@@ -44,7 +44,7 @@ TEST_API_DEPS=\
   $(module_srcdir)/lib/prometheus/metric/db.o \
   $(module_srcdir)/lib/prometheus/registry.o
 
-TEST_API_LIBS="-lcheck -lm @MODULE_LIBS@"
+TEST_API_LIBS=-lcheck -lm @MODULE_LIBS@
 
 TEST_API_OBJS=\
   api/db.o \

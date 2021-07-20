@@ -33,9 +33,18 @@ struct prom_dbh *prom_metric_db_open(pool *p, const char *tables_path);
 struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
   int flags);
 
-int prom_metric_db_add_metric(pool *p, struct prom_dbh *dbh,
+int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
+  const char *metric_name, int metric_type, int64_t *metric_id);
+int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
   const char *metric_name);
-int prom_metric_db_exists_metric(pool *p, struct prom_dbh *dbh,
-  const char *metric_name);
+
+int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
+  int64_t metric_id, const char *sample_labels);
+int prom_metric_db_sample_decr(pool *p, struct prom_dbh *dbh,
+  int64_t metric_id, double sample_val, const char *sample_labels);
+int prom_metric_db_sample_incr(pool *p, struct prom_dbh *dbh,
+  int64_t metric_id, double sample_val, const char *sample_labels);
+array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
+  int64_t metric_id);
 
 #endif /* MOD_PROMETHEUS_METRIC_DB_H */
