@@ -607,7 +607,7 @@ array_header *prom_db_exec_prepared_stmt(pool *p, struct prom_dbh *dbh,
       val = pstrdup(p, (const char *) sqlite3_column_text(pstmt, i));
 
       pr_trace_msg(trace_channel, 17,
-        "column %s [%u]: %s", sqlite3_column_name(pstmt, i), i,
+        "column %s [%u]: '%s'", sqlite3_column_name(pstmt, i), i,
         val != NULL ? val : "NULL");
       *((char **) push_array(results)) = val;
     }

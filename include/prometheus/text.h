@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_prometheus text API
+ * Copyright (c) 2021 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,30 +22,25 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_PROMETHEUS_TESTS_H
-#define MOD_PROMETHEUS_TESTS_H
+#ifndef MOD_PROMETHEUS_TEXT_H
+#define MOD_PROMETHEUS_TEXT_H
 
 #include "mod_prometheus.h"
+#include "prometheus/metric.h"
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+struct prom_text;
 
-int tests_rmpath(pool *p, const char *path);
+struct prom_text *prom_text_create(pool *p);
+int prom_text_destroy(struct prom_text *text);
 
-Suite *tests_get_db_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_metric_suite(void);
-Suite *tests_get_metric_db_suite(void);
-Suite *tests_get_registry_suite(void);
-Suite *tests_get_text_suite(void);
+int prom_text_add_byte(struct prom_text *text, char ch);
+int prom_text_add_str(struct prom_text *text, const char *str, size_t sz);
 
-extern volatile unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
+/* Obtain a copy of the accumulated text, duplicated from the given pool. */
+char *prom_text_get_str(pool *p, struct prom_text *text, size_t *sz);
 
-#endif /* MOD_PROMETHEUS_TESTS_H */
+/* Convert the given labels to text. */
+const char *prom_text_from_labels(pool *p, struct prom_text *text,
+  pr_table_t *labels);
+
+#endif /* MOD_PROMETHEUS_TEXT_H */

@@ -32,6 +32,7 @@ struct testsuite_info {
 static struct testsuite_info suites[] = {
   { "db",		tests_get_db_suite },
   { "http",		tests_get_http_suite },
+  { "text",		tests_get_text_suite },
   { "metric",		tests_get_metric_suite },
   { "metric.db",	tests_get_metric_db_suite },
   { "registry",		tests_get_registry_suite },

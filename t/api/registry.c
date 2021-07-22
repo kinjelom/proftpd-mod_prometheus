@@ -65,6 +65,7 @@ END_TEST
 
 START_TEST (registry_init_test) {
   int res;
+  const char *name;
   struct prom_registry *registry;
 
   mark_point();
@@ -84,6 +85,18 @@ START_TEST (registry_init_test) {
   fail_unless(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
+  mark_point();
+  name = prom_registry_get_name(NULL);
+  fail_unless(name == NULL, "Failed to handle null registry");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  name = prom_registry_get_name(registry);
+  fail_unless(name != NULL, "Failed to get name: %s", strerror(errno));
+  fail_unless(strcmp(name, "test") == 0, "Expected 'test', got '%s'",
+    name);
+
   res = prom_registry_free(registry);
   fail_unless(res == 0, "Failed to free registry: %s", strerror(errno));
 }
@@ -100,6 +113,18 @@ Suite *tests_get_registry_suite(void) {
 
   tcase_add_test(testcase, registry_free_test);
   tcase_add_test(testcase, registry_init_test);
+
+  /* TODO */
+#if 0
+  tcase_add_test(testcase, registry_get_metric_test);
+  tcase_add_test(testcase, registry_remove_metric_test);
+  tcase_add_test(testcase, registry_add_metric_test);
+  tcase_add_test(testcase, registry_sort_metrics_test);
+
+  tcase_add_test(testcase, registry_set_dbh_test);
+
+  tcase_add_test(testcase, registry_get_text_test);
+#endif
 
   suite_add_tcase(suite, testcase);
   return suite;

@@ -17,14 +17,16 @@ MODULE_OBJS=mod_prometheus.o \
   lib/prometheus/http.o \
   lib/prometheus/metric.o \
   lib/prometheus/metric/db.o \
-  lib/prometheus/registry.o
+  lib/prometheus/registry.o \
+  lib/prometheus/text.o
 
 SHARED_MODULE_OBJS=mod_prometheus.lo \
   lib/prometheus/db.lo \
   lib/prometheus/http.lo \
   lib/prometheus/metric.lo \
   lib/prometheus/metric/db.lo \
-  lib/prometheus/registry.lo
+  lib/prometheus/registry.lo \
+  lib/prometheus/text.lo
 
 # Necessary redefinitions
 INCLUDES=-I. -I./include -I../.. -I../../include @INCLUDES@

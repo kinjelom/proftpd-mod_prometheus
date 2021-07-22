@@ -827,10 +827,10 @@ static void ev_incr_value(const char *metric_name, int32_t incr,
 /* XXX need to add protocol label, others */
 
   if (incr >= 0) {
-    res = prom_metric_incr(metric, incr, labels);
+    res = prom_metric_incr(p, metric, incr, labels);
 
   } else {
-    res = prom_metric_decr(metric, -incr, labels);
+    res = prom_metric_decr(p, metric, -incr, labels);
   }
 
   if (res < 0) {
@@ -964,6 +964,176 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 }
 #endif /* PR_SHARED_MODULE */
 
+static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
+  int res;
+  struct prom_metric *metric;
+
+  /* Session metrics:
+   *
+   *  directory_list
+   *  directory_list_error
+   *  file_download
+   *  file_download_error
+   *  file_upload
+   *  file_upload_error
+   *  login
+   *  login_error
+   *  timeout
+   *  handshake_error
+   *  tls_protocol
+   *  sftp_protocol
+   */
+
+  metric = prom_metric_create(prometheus_pool, "directory_list", dbh);
+  prom_metric_add_counter(metric, "total", "Number of directory listings");
+  prom_metric_add_gauge(metric, "count", "Current count of directory listings");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "directory_list_error", dbh);
+  prom_metric_add_counter(metric, "total",
+    "Number of failed directory listings");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "file_download", dbh);
+  prom_metric_add_counter(metric, "total", "Number of file downloads");
+  prom_metric_add_gauge(metric, "count", "Current count of file downloads");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "file_download_error", dbh);
+  prom_metric_add_counter(metric, "total", "Number of failed file downloads");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "file_upload", dbh);
+  prom_metric_add_counter(metric, "total", "Number of file uploads");
+  prom_metric_add_gauge(metric, "count", "Current count of file uploads");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "file_upload_error", dbh);
+  prom_metric_add_counter(metric, "total", "Number of failed file uploads");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "login", dbh);
+  prom_metric_add_counter(metric, "total", "Number of logins");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "login_error", dbh);
+  prom_metric_add_counter(metric, "total", "Number of failed logins");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "timeout", dbh);
+  prom_metric_add_counter(metric, "total", "Number of timeouts");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "handshake_error", dbh);
+  prom_metric_add_counter(metric, "total",
+    "Number of failed SFTP/TLS handshakes");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "sftp_protocol", dbh);
+  prom_metric_add_counter(metric, NULL,
+    "Number of SFTP sessions by protocol version");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "tls_protocol", dbh);
+  prom_metric_add_counter(metric, NULL,
+    "Number of TLS sessions by protocol version");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+}
+
+static void create_server_metrics(pool *p, struct prom_dbh *dbh) {
+  int res;
+  struct prom_metric *metric;
+
+  /* Server metrics:
+   *
+   *  connection_refused
+   *  log_message
+   *  segfault
+   *  session
+   */
+
+  metric = prom_metric_create(prometheus_pool, "connection_refused", dbh);
+  prom_metric_add_counter(metric, "total", "Number of refused connections");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "log_message", dbh);
+  prom_metric_add_counter(metric, "total", "Number of log_messages");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "segfault", dbh);
+  prom_metric_add_counter(metric, "total", "Number of segfaults");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+
+  metric = prom_metric_create(prometheus_pool, "session", dbh);
+  prom_metric_add_counter(metric, "total", "Number of sessions");
+  prom_metric_add_gauge(metric, "count", "Current count of sessions");
+  res = prom_registry_add_metric(prometheus_registry, metric);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
+      prom_metric_get_name(metric), strerror(errno));
+  }
+}
+
 static void create_metrics(struct prom_dbh *dbh) {
   pool *tmp_pool;
   int res;
@@ -982,12 +1152,12 @@ static void create_metrics(struct prom_dbh *dbh) {
   } else {
     pr_table_t *labels;
 
-    labels = pr_table_nalloc(tmp_pool, 0, 4);
+    labels = pr_table_nalloc(tmp_pool, 0, 2);
     (void) pr_table_add_dup(labels, "proftpd_version", pr_version_get_str(), 0);
     (void) pr_table_add_dup(labels, "mod_prometheus_version",
       MOD_PROMETHEUS_VERSION, 0);
 
-    res = prom_metric_incr(metric, 1, labels);
+    res = prom_metric_incr(tmp_pool, metric, 1, labels);
     if (res <  0) {
       pr_trace_msg(trace_channel, 3, "error incrementing metric '%s': %s",
         prom_metric_get_name(metric), strerror(errno));
@@ -1006,12 +1176,15 @@ static void create_metrics(struct prom_dbh *dbh) {
     time_t now;
 
     now = time(NULL);
-    res = prom_metric_incr(metric, now, NULL);
+    res = prom_metric_incr(tmp_pool, metric, now, NULL);
     if (res <  0) {
       pr_trace_msg(trace_channel, 3, "error incrementing metric '%s': %s",
         prom_metric_get_name(metric), strerror(errno));
     }
   }
+
+  create_server_metrics(tmp_pool, dbh);
+  create_session_metrics(tmp_pool, dbh);
 
   res = prom_registry_sort_metrics(tmp_pool, prometheus_registry);
   if (res < 0) {
@@ -1082,7 +1255,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": missing required PrometheusExporter directive, disabling module");
 
-    prom_metric_free(prometheus_pool);
+    prom_metric_free(prometheus_pool, dbh);
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
 
@@ -1090,7 +1263,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   }
 
   if (prom_http_init(prometheus_pool) < 0) {
-    prom_metric_free(prometheus_pool);
+    prom_metric_free(prometheus_pool, dbh);
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
 
@@ -1109,7 +1282,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
 
-    prom_metric_free(prometheus_pool);
+    prom_metric_free(prometheus_pool, dbh);
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
   }

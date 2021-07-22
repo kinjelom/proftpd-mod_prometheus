@@ -76,6 +76,13 @@ const char *prom_registry_get_text(pool *p, struct prom_registry *registry) {
     return NULL;
   }
 
+  /* Notes:
+   *
+   * For each metric (sorted order!):
+   *   get metric text (registry->registry_name, text)
+   *     ignore metrics w/o text (no counter/gauge/histogram; code bug!)
+   */
+
   text = pstrcat(p, "OK\n\n", NULL);
   return text;
 }

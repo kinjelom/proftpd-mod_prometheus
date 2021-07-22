@@ -33,10 +33,6 @@ struct prom_metric;
 struct prom_metric *prom_metric_create(pool *p, const char *name,
   struct prom_dbh *dbh);
 
-#define PROM_METRIC_TYPE_COUNTER	1
-#define PROM_METRIC_TYPE_GAUGE		2
-#define PROM_METRIC_TYPE_HISTOGRAM	3
-
 int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   const char *help_text);
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
@@ -47,28 +43,36 @@ int prom_metric_destroy(pool *p, struct prom_metric *metric);
 /* Returns the metric name. */
 const char *prom_metric_get_name(struct prom_metric *metric);
 
-/* Returns the text for the metric. */
-const char *prom_metric_get_text(pool *p, struct prom_metric *metric);
-
 /* Decrement the specified metric by the given `decr`; applies to any
  * gauge records associated with this metric.
  */
-int prom_metric_decr(const struct prom_metric *metric, uint32_t decr,
+int prom_metric_decr(pool *p, const struct prom_metric *metric, uint32_t decr,
   pr_table_t *labels);
 
 /* Increment the specified metric by the given `incr`; applies to any
  * counter/gauge records associated with this metric.
  */
-int prom_metric_incr(const struct prom_metric *metric, uint32_t incr,
+int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t incr,
   pr_table_t *labels);
 
 /* Setl the specified metric by the given `val`; applies to any
  * gauge records associated with this metric.
  */
-int prom_metric_set(const struct prom_metric *metric, uint32_t val,
+int prom_metric_set(pool *p, const struct prom_metric *metric, uint32_t val,
   pr_table_t *labels);
 
+/* Returns the collected samples for this metric and type. */
+const array_header *prom_metric_get(pool *p, struct prom_metric *metric,
+  int metric_type);
+#define PROM_METRIC_TYPE_COUNTER	1
+#define PROM_METRIC_TYPE_GAUGE		2
+#define PROM_METRIC_TYPE_HISTOGRAM	3
+
+/* Get the Prometheus exposition formatted text for the metric. */
+const char *prom_metric_get_text(pool *p, struct prom_metric *metric,
+  const char *registry_name, size_t *textlen);
+
 struct prom_dbh *prom_metric_init(pool *p, const char *tables_path);
-int prom_metric_free(pool *p);
+int prom_metric_free(pool *p, struct prom_dbh *dbh);
 
 #endif /* MOD_PROMETHEUS_METRIC_H */

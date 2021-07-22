@@ -115,7 +115,7 @@ jobs:
           CC: ${{ matrix.compiler }}
         run: |
           cd proftpd
-          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel=coverage --with-modules=mod_prometheus
+          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel=coverage --enable-tests --with-modules=mod_prometheus
           make
 
       - name: Run unit tests
@@ -138,7 +138,7 @@ jobs:
         run: |
           cd proftpd
           make clean
-          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel --enable-dso --enable-tests --with-shared=mod_prometheus
+          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel --enable-dso --with-shared=mod_prometheus
           make
 
       - name: Install as shared module

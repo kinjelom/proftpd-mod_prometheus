@@ -44,7 +44,9 @@ int prom_metric_db_sample_decr(pool *p, struct prom_dbh *dbh,
   int64_t metric_id, double sample_val, const char *sample_labels);
 int prom_metric_db_sample_incr(pool *p, struct prom_dbh *dbh,
   int64_t metric_id, double sample_val, const char *sample_labels);
-array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
+int prom_metric_db_sample_set(pool *p, struct prom_dbh *dbh,
+  int64_t metric_id, double sample_val, const char *sample_labels);
+const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
   int64_t metric_id);
 
 #endif /* MOD_PROMETHEUS_METRIC_DB_H */

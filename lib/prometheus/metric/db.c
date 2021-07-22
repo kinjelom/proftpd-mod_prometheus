@@ -65,11 +65,11 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
    *   sample_id INTEGER NOT NULL PRIMARY KEY,
    *   metric_id INTEGER NOT NULL,
    *   sample_value DOUBLE NOT NULL,
-   *   sample_labels TEXT DEFAULT NULL,
+   *   sample_labels TEXT NOT NULL,
    *   FOREIGN KEY (metric_id) REFERENCES metrics (metric_id)
    * );
    */
-  stmt = "CREATE TABLE IF NOT EXISTS metric_samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value DOUBLE NOT NULL, sample_labels TEXT DEFAULT NULL, FOREIGN KEY (metric_id) REFERENCES metrics (metric_id));";
+  stmt = "CREATE TABLE IF NOT EXISTS metric_samples (sample_id INTEGER NOT NULL PRIMARY KEY, metric_id INTEGER NOT NULL, sample_value DOUBLE NOT NULL, sample_labels TEXT NOT NULL, FOREIGN KEY (metric_id) REFERENCES metrics (metric_id));";
   res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
   if (res < 0) {
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -234,13 +234,12 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
   const char *stmt, *errstr = NULL;
   array_header *results;
 
-  if (sample_labels != NULL) {
-    stmt = "SELECT sample_value FROM metric_samples WHERE metric_id = ? AND sample_labels = ?;";
-
-  } else {
-    stmt = "SELECT sample_value FROM metric_samples WHERE metric_id = ? AND sample_labels IS NULL;";
+  if (sample_labels == NULL) {
+    errno = EINVAL;
+    return -1;
   }
 
+  stmt = "SELECT sample_value FROM metric_samples WHERE metric_id = ? AND sample_labels = ?;";
   res = prom_db_prepare_stmt(p, dbh, stmt);
   if (res < 0) {
     return -1;
@@ -252,11 +251,8 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
-  if (sample_labels != NULL) {
-    res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_TEXT,
-      (void *) sample_labels);
-  }
-
+  res = prom_db_bind_stmt(p, dbh, stmt, 2, PROM_DB_BIND_TYPE_TEXT,
+    (void *) sample_labels);
   if (res < 0) {
     return -1;
   }
@@ -283,13 +279,7 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
   const char *stmt, *errstr = NULL;
   array_header *results;
 
-  if (sample_labels != NULL) {
-    stmt = "INSERT INTO metric_samples (metric_id, sample_value, sample_labels) VALUES (?, ?, ?);";
-
-  } else {
-    stmt = "INSERT INTO metric_samples (metric_id, sample_value) VALUES (?, ?);";
-  }
-
+  stmt = "INSERT INTO metric_samples (metric_id, sample_value, sample_labels) VALUES (?, ?, ?);";
   res = prom_db_prepare_stmt(p, dbh, stmt);
   if (res < 0) {
     return -1;
@@ -307,11 +297,8 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
     return -1;
   }
 
-  if (sample_labels != NULL) {
-    res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
-      (void *) &sample_labels);
-  }
-
+  res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
+    (void *) sample_labels);
   if (res < 0) {
     return -1;
   }
@@ -350,11 +337,8 @@ static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
     return -1;
   }
 
-  if (sample_labels != NULL) {
-    res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
-      (void *) &sample_labels);
-  }
-
+  res = prom_db_bind_stmt(p, dbh, stmt, 3, PROM_DB_BIND_TYPE_TEXT,
+    (void *) sample_labels);
   if (res < 0) {
     return -1;
   }
@@ -394,13 +378,7 @@ int prom_metric_db_sample_decr(pool *p, struct prom_dbh *dbh,
     }
   }
 
-  if (sample_labels != NULL) {
-    stmt = "UPDATE metric_samples SET sample_value = sample_value - ? WHERE metric_id = ? AND sample_labels = ?;";
-
-  } else {
-    stmt = "UPDATE metric_samples SET sample_value = sample_value - ? WHERE metric_id = ? AND sample_labels IS NULL;";
-  }
-
+  stmt = "UPDATE metric_samples SET sample_value = sample_value - ? WHERE metric_id = ? AND sample_labels = ?;";
   return db_sample_adj(p, dbh, stmt, metric_id, sample_val, sample_labels);
 }
 
@@ -428,17 +406,39 @@ int prom_metric_db_sample_incr(pool *p, struct prom_dbh *dbh,
     }
   }
 
-  if (sample_labels != NULL) {
-    stmt = "UPDATE metric_samples SET sample_value = sample_value + ? WHERE metric_id = ? AND sample_labels = ?;";
-
-  } else {
-    stmt = "UPDATE metric_samples SET sample_value = sample_value + ? WHERE metric_id = ? AND sample_labels IS NULL;";
-  }
-
+  stmt = "UPDATE metric_samples SET sample_value = sample_value + ? WHERE metric_id = ? AND sample_labels = ?;";
   return db_sample_adj(p, dbh, stmt, metric_id, sample_val, sample_labels);
 }
 
-array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
+int prom_metric_db_sample_set(pool *p, struct prom_dbh *dbh,
+    int64_t metric_id, double sample_val, const char *sample_labels) {
+  int res;
+  const char *stmt;
+
+  /* NOTE: Beware of race conditions with other processes, due to this
+   * check-and-set sequence, for this sample.
+   *
+   * Consider using wrapping this in a BEGIN/COMMIT block; use EXCLUSIVE?
+   */
+  res = prom_metric_db_sample_exists(p, dbh, metric_id, sample_labels);
+  if (res < 0) {
+    double init_val = 0.0;
+
+    if (errno != ENOENT) {
+      return -1;
+    }
+
+    res = db_sample_create(p, dbh, metric_id, init_val, sample_labels);
+    if (res < 0) {
+      return -1;
+    }
+  }
+
+  stmt = "UPDATE metric_samples SET sample_value = ? WHERE metric_id = ? AND sample_labels = ?;";
+  return db_sample_adj(p, dbh, stmt, metric_id, sample_val, sample_labels);
+}
+
+const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
     int64_t metric_id) {
   int res;
   const char *stmt, *errstr = NULL;
@@ -450,7 +450,7 @@ array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
     return NULL;
   }
 
-  stmt = "SELECT sample_value, sample_labels FROM metric_samples WHERE metric_id = ?;";
+  stmt = "SELECT sample_value, sample_labels FROM metric_samples WHERE metric_id = ? ORDER BY sample_labels ASC;";
   res = prom_db_prepare_stmt(p, dbh, stmt);
   if (res < 0) {
     return NULL;

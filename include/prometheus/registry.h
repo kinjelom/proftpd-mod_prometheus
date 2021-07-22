@@ -26,6 +26,7 @@
 #define MOD_PROMETHEUS_REGISTRY_H
 
 #include "mod_prometheus.h"
+#include "prometheus/db.h"
 #include "prometheus/metric.h"
 
 struct prom_registry;
@@ -44,6 +45,9 @@ int prom_registry_remove_metric(struct prom_registry *registry,
 /* Returns the metric object for the given metric name. */
 const struct prom_metric *prom_registry_get_metric(
   struct prom_registry *registry, const char *metric_name);
+
+/* Sets the given database handle on all registered metrics. */
+int prom_registry_set_dbh(struct prom_registry *registry, struct prom_dbh *dbh);
 
 /* Caches a sorted list of metric names, for use in generating the text. */
 int prom_registry_sort_metrics(pool *p, struct prom_registry *registry);
