@@ -1284,7 +1284,7 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
-  promtheus_dbh = NULL;
+  prometheus_dbh = NULL;
   prometheus_exporter_http = NULL;
 
   (void) prom_registry_free(prometheus_registry);
