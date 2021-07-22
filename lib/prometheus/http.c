@@ -195,9 +195,54 @@ static enum MHD_Result handle_request_cb(void *user_data,
   }
 
   if (strcmp(http_uri, "/metrics") == 0) {
-    status_code = MHD_HTTP_OK;
+    int xerrno;
+
+    pr_trace_msg(trace_channel, 19, "exporter received /metrics request");
+
     text = prom_registry_get_text(resp_pool, http->registry);
+    xerrno = errno;
+
+    if (text == NULL) {
+      pr_trace_msg(trace_channel, 3, "error getting registry text: %s",
+        strerror(xerrno));
+
+      switch (xerrno) {
+        case ENOENT:
+          status_code = MHD_HTTP_NOT_FOUND;
+          text = "Not Found\n";
+          break;
+
+        case EINVAL:
+          status_code = MHD_HTTP_BAD_REQUEST;
+          text = "Bad Request\n";
+          break;
+
+        default:
+          status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+          text = "Internal Server Error\n";
+          break;
+      }
+
+      textlen = strlen(text);
+
+      resp = MHD_create_response_from_buffer(textlen, (void *) text,
+        MHD_RESPMEM_PERSISTENT);
+      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
+        "text/plain");
+      res = MHD_queue_response(conn, status_code, resp);
+      MHD_destroy_response(resp);
+
+      log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
+        status_code, textlen);
+      destroy_pool(resp_pool);
+
+      return res;
+    }
+
+    status_code = MHD_HTTP_OK;
     textlen = strlen(text);
+    pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen,
+      text);
 
     resp = MHD_create_response_from_buffer(textlen, (void *) text,
       MHD_RESPMEM_MUST_COPY);
@@ -234,14 +279,16 @@ static enum MHD_Result handle_request_cb(void *user_data,
   return res;
 }
 
-struct prom_http *prom_http_start(pool *p, unsigned short http_port,
+struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
     struct prom_registry *registry) {
   struct prom_http *http;
   pool *http_pool;
   struct MHD_Daemon *mhd;
+  unsigned int http_port;
   int flags;
 
   if (p == NULL ||
+      addr == NULL ||
       registry == NULL) {
     errno = EINVAL;
     return NULL;
@@ -254,7 +301,9 @@ struct prom_http *prom_http_start(pool *p, unsigned short http_port,
   http->pool = http_pool;
   http->registry = registry;
 
-  pr_trace_msg(trace_channel, 9, "starting exporter on port %u", http_port);
+  http_port = ntohs(pr_netaddr_get_port(addr));
+  pr_trace_msg(trace_channel, 9, "starting exporter on %s:%u",
+    pr_netaddr_get_ipstr(addr), http_port);
 
   flags = MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_ERROR_LOG|MHD_USE_DEBUG;
   mhd = MHD_start_daemon(flags, http_port, NULL, NULL,
@@ -262,6 +311,7 @@ struct prom_http *prom_http_start(pool *p, unsigned short http_port,
     MHD_OPTION_EXTERNAL_LOGGER, log_cb, NULL,
     MHD_OPTION_CONNECTION_LIMIT, 1,
     MHD_OPTION_CONNECTION_TIMEOUT, 10,
+    MHD_OPTION_SOCK_ADDR, pr_netaddr_get_sockaddr(addr),
     MHD_OPTION_END);
   if (mhd == NULL) {
     int xerrno = errno;

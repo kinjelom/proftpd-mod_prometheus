@@ -30,6 +30,7 @@
 #include "prometheus/db.h"
 #include "prometheus/registry.h"
 #include "prometheus/metric.h"
+#include "prometheus/metric/db.h"
 #include "prometheus/http.h"
 
 /* Defaults */
@@ -46,6 +47,7 @@ static unsigned long prometheus_opts = 0UL;
 static struct timeval prometheus_start_tv;
 static const char *prometheus_tables_dir = NULL;
 
+static struct prom_dbh *prometheus_dbh = NULL;
 static struct prom_registry *prometheus_registry = NULL;
 static struct prom_http *prometheus_exporter_http = NULL;
 static pid_t prometheus_exporter_pid = 0;
@@ -221,8 +223,9 @@ static void prom_daemonize(const char *daemon_dir) {
   pr_fsio_chdir(daemon_dir, 0);
 }
 
-static pid_t prom_exporter_start(pool *p, unsigned short exporter_port) {
+static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr) {
   pid_t exporter_pid;
+  struct prom_dbh *dbh;
   char *exporter_chroot = NULL;
 
   exporter_pid = fork();
@@ -257,6 +260,22 @@ static pid_t prom_exporter_start(pool *p, unsigned short exporter_port) {
 
   /* Remove our event listeners. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
+
+  /* Close any database handle inherited from our parent, and open a new
+   * one, per SQLite3 recommendation.
+   */
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  prometheus_dbh = NULL;
+  dbh = prom_metric_db_open(prometheus_pool, prometheus_tables_dir);
+  if (dbh == NULL) {
+    pr_trace_msg(trace_channel, 3, "exporter error opening '%s' database: %s",
+      prometheus_tables_dir, strerror(errno));
+  }
+
+  if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
+    pr_trace_msg(trace_channel, 3, "exporter error setting registry dbh: %s",
+      strerror(errno));
+  }
 
   PRIVS_ROOT
   if (getuid() == PR_ROOT_UID) {
@@ -300,7 +319,7 @@ static pid_t prom_exporter_start(pool *p, unsigned short exporter_port) {
   session.gid = getegid();
   PRIVS_REVOKE
 
-  prometheus_exporter_http = prom_http_start(p, exporter_port,
+  prometheus_exporter_http = prom_http_start(p, exporter_addr,
     prometheus_registry);
   if (prometheus_exporter_http == NULL) {
     return 0;
@@ -347,7 +366,12 @@ static void prom_exporter_stop(pid_t exporter_pid) {
       errno == ESRCH) {
     return;
   }
-  
+
+  if (prom_http_stop(prometheus_pool, prometheus_exporter_http) < 0) {
+    pr_trace_msg(trace_channel, 3, "error stopping exporter http listener: %s",
+      strerror(errno));
+  }
+
   res = kill(exporter_pid, SIGTERM);
   if (res < 0) {
     int xerrno = errno;
@@ -428,6 +452,7 @@ static void prom_exporter_stop(pid_t exporter_pid) {
   }
 
   exporter_pid = 0;
+  prometheus_exporter_http = NULL;
 }
 
 /* Configuration handlers
@@ -453,38 +478,89 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* usage: PrometheusExporter [address:]port */
+/* usage: PrometheusExporter address[:port] */
 MODRET set_prometheusexporter(cmd_rec *cmd) {
-  char *ptr;
+  char *addr, *ptr;
+  size_t addrlen;
   config_rec *c;
+  pr_netaddr_t *exporter_addr;
   unsigned short exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
+  c = add_config_param(cmd->argv[0], 1, NULL);
+
   /* Separate the port out from the address, if present. */
   ptr = strrchr(cmd->argv[1], ':');
   if (ptr != NULL) {
-    /* XXX Handle provided address; deal with libmicrohttpd API for
-     * assigning/binding to specific listening address.
+    char *ptr2;
+
+    /* We need to handle the following possibilities:
      *
-     * Handle both IPv4 and IPv6 addresses.
+     *  ipv4-addr
+     *  ipv4-addr:port
+     *  [ipv6-addr]
+     *  [ipv6-addr]:port
+     *
+     * Thus we check to see if the last ':' occurs before, or after,
+     * a ']' for an IPv6 address.
      */
 
-  } else {
-    int port;
-
-    port = atoi(cmd->argv[1]);
-    if (port < 1 || port > 65535) {
-      CONF_ERROR(cmd, "port must be between 1-65535");
+    ptr2 = strrchr(cmd->argv[1], ']');
+    if (ptr2 != NULL) {
+      if (ptr2 > ptr) {
+        /* The found ':' is part of an IPv6 address, not a port delimiter. */
+        ptr = NULL;
+      }
     }
 
-    exporter_port = (unsigned short) port;
+    if (ptr != NULL) {
+      *ptr = '\0';
+
+      exporter_port = atoi(ptr + 1);
+      if (exporter_port < 1 ||
+          exporter_port > 65535) {
+        CONF_ERROR(cmd, "port must be between 1-65535");
+      }
+    }
   }
 
-  c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = pcalloc(c->pool, sizeof(unsigned short));
-  *((unsigned short *) c->argv[0]) = exporter_port;
+  addr = cmd->argv[1];
+  addrlen = strlen(addr);
+
+  /* Make sure we can handle an IPv6 address here, e.g.:
+   *
+   *   [::1]:162
+   */
+  if (addrlen > 0 &&
+      (addr[0] == '[' && addr[addrlen-1] == ']')) {
+    addr = pstrndup(cmd->pool, addr + 1, addrlen - 2);
+  }
+
+  /* Watch for wildcard addresses. */
+  if (strcmp(addr, "0.0.0.0") == 0) {
+    exporter_addr = pr_netaddr_alloc(c->pool);
+    pr_netaddr_set_family(exporter_addr, AF_INET);
+    pr_netaddr_set_sockaddr_any(exporter_addr);
+
+#if defined(PR_USE_IPV6)
+  } else if (strcmp(addr, "::") == 0) {
+    exporter_addr = pr_netaddr_alloc(c->pool);
+    pr_netaddr_set_family(exporter_addr, AF_INET6);
+    pr_netaddr_set_sockaddr_any(exporter_addr);
+#endif /* PR_USE_IPV6 */
+
+  } else {
+    exporter_addr = (pr_netaddr_t *) pr_netaddr_get_addr(c->pool, addr, NULL);
+    if (exporter_addr == NULL) {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+        "unable to resolve \"", addr, "\"", NULL));
+    }
+  }
+
+  pr_netaddr_set_port2(exporter_addr, exporter_port);
+  c->argv[0] = exporter_addr;
  
   return PR_HANDLED(cmd);
 }
@@ -880,17 +956,6 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
   ev_incr_value(metric_name, 1, labels); 
 }
 
-static void prom_cmd_invalid_ev(const void *event_data, void *user_data) {
-  const char *metric_name;
-
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  metric_name = "invalid_command_total";  
-  ev_incr_value(metric_name, 1, NULL);
-}
-
 static void prom_exit_ev(const void *event_data, void *user_data) {
   pr_table_t *labels = NULL;
 
@@ -950,17 +1015,19 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   /* Unregister ourselves from all events. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
-  /* XXX Need to close various database tables here. */
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  promtheus_dbh = NULL;
+  prometheus_exporter_http = NULL;
+
+  (void) prom_registry_free(prometheus_registry);
+  prometheus_registry = NULL;
+  prometheus_tables_dir = NULL;
 
   destroy_pool(prometheus_pool);
   prometheus_pool = NULL;
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
-
-  prometheus_exporter_http = NULL;
-  prometheus_registry = NULL;
-  prometheus_tables_dir = NULL;
 }
 #endif /* PR_SHARED_MODULE */
 
@@ -1186,7 +1253,7 @@ static void create_metrics(struct prom_dbh *dbh) {
   create_server_metrics(tmp_pool, dbh);
   create_session_metrics(tmp_pool, dbh);
 
-  res = prom_registry_sort_metrics(tmp_pool, prometheus_registry);
+  res = prom_registry_sort_metrics(prometheus_registry);
   if (res < 0) {
     pr_trace_msg(trace_channel, 3, "error sorting registry metrics: %s",
       strerror(errno));
@@ -1197,8 +1264,7 @@ static void create_metrics(struct prom_dbh *dbh) {
 
 static void prom_postparse_ev(const void *event_data, void *user_data) {
   config_rec *c;
-  int exporter_port;
-  struct prom_dbh *dbh;
+  pr_netaddr_t *exporter_addr;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
   if (c != NULL) {
@@ -1234,11 +1300,8 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   }
 
   prometheus_tables_dir = c->argv[0];
-
-  prometheus_registry = prom_registry_init(prometheus_pool, "proftpd");
-
-  dbh = prom_metric_init(prometheus_pool, prometheus_tables_dir);
-  if (dbh == NULL) {
+  prometheus_dbh = prom_metric_init(prometheus_pool, prometheus_tables_dir);
+  if (prometheus_dbh == NULL) {
     pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
       ": unable to initialize metrics, failing to start up: %s",
       strerror(errno));
@@ -1246,8 +1309,10 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
       "Failed metrics initialization");
   }
 
+  prometheus_registry = prom_registry_init(prometheus_pool, "proftpd");
+
   /* Create our known metrics, and register them. */
-  create_metrics(dbh);
+  create_metrics(prometheus_dbh);
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusExporter", FALSE);
   if (c == NULL) {
@@ -1255,7 +1320,9 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": missing required PrometheusExporter directive, disabling module");
 
-    prom_metric_free(prometheus_pool, dbh);
+    prom_metric_free(prometheus_pool, prometheus_dbh);
+    prometheus_dbh = NULL;
+
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
 
@@ -1263,7 +1330,9 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   }
 
   if (prom_http_init(prometheus_pool) < 0) {
-    prom_metric_free(prometheus_pool, dbh);
+    prom_metric_free(prometheus_pool, prometheus_dbh);
+    prometheus_dbh = NULL;
+
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
 
@@ -1274,15 +1343,17 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
       "Failed HTTP initialization");
   }
 
-  exporter_port = *((unsigned short *) c->argv[0]);
+  exporter_addr = c->argv[0];
 
-  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_port);
+  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_addr);
   if (prometheus_exporter_pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
 
-    prom_metric_free(prometheus_pool, dbh);
+    prom_metric_free(prometheus_pool, prometheus_dbh);
+    prometheus_dbh = NULL;
+
     prom_registry_free(prometheus_registry);
     prometheus_registry = NULL;
   }
@@ -1295,9 +1366,16 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
 
   pr_trace_msg(trace_channel, 17,
     "restart event received, resetting counters");
-  /* XXX */
 
   prom_exporter_stop(prometheus_exporter_pid);
+
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  prometheus_dbh = NULL;
+  prometheus_exporter_http = NULL;
+
+  (void) prom_registry_free(prometheus_registry);
+  prometheus_registry = NULL;
+  prometheus_tables_dir = NULL;
 
   /* Close the PrometheusLog file descriptor; it will be reopened in the
    * postparse event listener.
@@ -1627,8 +1705,11 @@ static int prom_init(void) {
 }
 
 static int prom_sess_init(void) {
-  pr_event_register(&prometheus_module, "core.invalid-command",
-    prom_cmd_invalid_ev, NULL);
+  pool *tmp_pool;
+  struct prom_dbh *dbh;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
+
   pr_event_register(&prometheus_module, "core.timeout-idle",
     prom_timeout_idle_ev, NULL);
   pr_event_register(&prometheus_module, "core.timeout-login",
@@ -1637,8 +1718,6 @@ static int prom_sess_init(void) {
     prom_timeout_noxfer_ev, NULL);
   pr_event_register(&prometheus_module, "core.timeout-stalled",
     prom_timeout_stalled_ev, NULL);
-  pr_event_register(&prometheus_module, "core.unhandled-command",
-    prom_cmd_invalid_ev, NULL);
 
   pr_event_register(&prometheus_module, "mod_auth.authentication-code",
     prom_auth_code_ev, NULL);
@@ -1690,21 +1769,25 @@ static int prom_sess_init(void) {
       prom_ssh2_scp_sess_closed_ev, NULL);
   }
 
-#if TJ
-  res = prom_db_incr_value(session.pool, PROM_DB_DAEMON_F_CONN_COUNT, 1);
-  if (res < 0) {
-    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
-      "error incrementing daemon.connectionCount: %s",
+  /* Close any database handle inherited from our parent, and open a new
+   * one, per SQLite3 recommendation.
+   */
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  prometheus_dbh = NULL;
+  dbh = prom_metric_db_init(session.pool, prometheus_tables_dir,
+    PROM_DB_OPEN_FL_VACUUM);
+  if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
+    pr_trace_msg(trace_channel, 3, "error setting registry dbh: %s",
       strerror(errno));
   }
 
-  res = prom_db_incr_value(session.pool, PROM_DB_DAEMON_F_CONN_TOTAL, 1);
-  if (res < 0) {
-    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
-      "error incrementing daemon.connectionTotal: %s",
-      strerror(errno));
-  }
-#endif
+  tmp_pool = make_sub_pool(session.pool);
+  labels = pr_table_nalloc(tmp_pool, 0, 2);
+  (void) pr_table_add(labels, "protocol", pr_session_get_protocol(0), 0);
+
+  metric = prom_registry_get_metric(prometheus_registry, "session");
+  prom_metric_incr(tmp_pool, metric, 1, labels);
+  destroy_pool(tmp_pool);
 
   return 0;
 }

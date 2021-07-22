@@ -32,29 +32,13 @@
 static pool *p = NULL;
 static const char *test_dir = "/tmp/prt-mod_prometheus-test-db";
 
-static int create_test_dir(void) {
-  int res;
-  mode_t perms;
-
-  perms = 0770;
-  res = mkdir(test_dir, perms);
-  fail_unless(res == 0, "Failed to create tmp directory '%s': %s", test_dir,
-    strerror(errno));
-
-  res = chmod(test_dir, perms);
-  fail_unless(res == 0, "Failed to set perms %04o on directory '%s': %s",
-    perms, test_dir, strerror(errno));
-
-  return 0;
-}
-
 static void set_up(void) {
   if (p == NULL) {
     p = permanent_pool = make_sub_pool(NULL);
   }
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("prometheus.db", 1, 20);
@@ -126,7 +110,7 @@ START_TEST (metric_db_open_test) {
   struct prom_dbh *dbh;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   dbh = prom_metric_db_open(NULL, NULL);
@@ -169,7 +153,7 @@ START_TEST (metric_db_exists_test) {
   struct prom_dbh *dbh;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_db_exists(NULL, NULL, NULL);
@@ -206,7 +190,7 @@ START_TEST (metric_db_create_test) {
   struct prom_dbh *dbh;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_db_create(NULL, NULL, NULL, 0, NULL);
@@ -256,7 +240,7 @@ START_TEST (metric_db_sample_get_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   results = prom_metric_db_sample_get(NULL, NULL, 0);
@@ -296,7 +280,7 @@ START_TEST (metric_db_sample_decr_test) {
   char **elts, *ptr;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_db_sample_decr(NULL, NULL, 0, 0.0, NULL);
@@ -339,8 +323,8 @@ START_TEST (metric_db_sample_decr_test) {
   sample_val = strtod(elts[0], &ptr);
   fail_if(ptr != NULL && *ptr, "Expected double sample value, got '%s'",
     elts[0]);
-  fail_unless(-sample_val == decr_val, "Expected sample value %lf, got %lf",
-    decr_val, sample_val);
+  fail_unless((int) -sample_val == (int) decr_val,
+    "Expected sample value %lf, got %lf", decr_val, sample_val);
 
   fail_unless(elts[1] != NULL, "Expected sample_labels, got null");
   fail_unless(strcmp(elts[1], "") == 0,
@@ -361,7 +345,7 @@ START_TEST (metric_db_sample_incr_test) {
   char **elts, *ptr;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_db_sample_incr(NULL, NULL, 0, 0.0, NULL);
@@ -404,8 +388,8 @@ START_TEST (metric_db_sample_incr_test) {
   sample_val = strtod(elts[0], &ptr);
   fail_if(ptr != NULL && *ptr, "Expected double sample value, got '%s'",
     elts[0]);
-  fail_unless(sample_val == incr_val, "Expected sample value %lf, got %lf",
-    incr_val, sample_val);
+  fail_unless((int) sample_val == (int) incr_val,
+    "Expected sample value %lf, got %lf", incr_val, sample_val);
 
   fail_unless(elts[1] != NULL, "Expected sample_labels, got null");
   fail_unless(strcmp(elts[1], "") == 0,
@@ -426,7 +410,7 @@ START_TEST (metric_db_sample_set_test) {
   char **elts, *ptr;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_db_sample_set(NULL, NULL, 0, 0.0, NULL);
@@ -469,8 +453,8 @@ START_TEST (metric_db_sample_set_test) {
   sample_val = strtod(elts[0], &ptr);
   fail_if(ptr != NULL && *ptr, "Expected double sample value, got '%s'",
     elts[0]);
-  fail_unless(sample_val == set_val, "Expected sample value %lf, got %lf",
-    set_val, sample_val);
+  fail_unless((int) sample_val == (int) set_val,
+    "Expected sample value %lf, got %lf", set_val, sample_val);
 
   fail_unless(elts[1] != NULL, "Expected sample_labels, got null");
   fail_unless(strcmp(elts[1], "") == 0,

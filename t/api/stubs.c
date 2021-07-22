@@ -40,6 +40,22 @@ int prometheus_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
+int tests_mkpath(pool *p, const char *path) {
+  int res;
+  mode_t perms;
+
+  perms = 0770;
+  res = mkdir(path, perms);
+  fail_unless(res == 0, "Failed to create tmp directory '%s': %s", path,
+    strerror(errno));
+
+  res = chmod(path, perms);
+  fail_unless(res == 0, "Failed to set perms %04o on directory '%s': %s",
+    perms, path, strerror(errno));
+
+  return 0;
+}
+
 int tests_rmpath(pool *p, const char *path) {
   DIR *dirh;
   struct dirent *dent;

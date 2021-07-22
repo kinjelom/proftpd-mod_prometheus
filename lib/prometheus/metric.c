@@ -151,13 +151,13 @@ static struct prom_text *add_metric_type_text(pool *p,
     metric_type);
 
   if (results->nelts == 0) {
-    /* Provide the default value of 0.0. */
+    /* Provide the default value of 0. */
     prom_text_add_str(text, registry_name, registry_namelen);
     prom_text_add_byte(text, '_');
     prom_text_add_str(text, type_name, type_namelen);
 
     /* TODO: What's the default for a histogram? */
-    prom_text_add_str(text, " 0.0\n", 5);
+    prom_text_add_str(text, " 0\n", 3);
 
     return text;
   }
@@ -491,6 +491,17 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   }
 
   metric->gauge_id = gauge_id;
+  return 0;
+}
+
+int prom_metric_set_dbh(struct prom_metric *metric, struct prom_dbh *dbh) {
+  if (metric == NULL ||
+      dbh == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  metric->dbh = dbh;
   return 0;
 }
 

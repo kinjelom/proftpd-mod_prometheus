@@ -32,13 +32,13 @@ struct prom_metric;
 
 struct prom_metric *prom_metric_create(pool *p, const char *name,
   struct prom_dbh *dbh);
+int prom_metric_destroy(pool *p, struct prom_metric *metric);
 
 int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   const char *help_text);
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   const char *help_text);
-
-int prom_metric_destroy(pool *p, struct prom_metric *metric);
+int prom_metric_set_dbh(struct prom_metric *metric, struct prom_dbh *dbh);
 
 /* Returns the metric name. */
 const char *prom_metric_get_name(struct prom_metric *metric);

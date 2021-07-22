@@ -31,29 +31,13 @@
 static pool *p = NULL;
 static const char *test_dir = "/tmp/prt-mod_prometheus-test-metrics";
 
-static int create_test_dir(void) {
-  int res;
-  mode_t perms;
-
-  perms = 0770;
-  res = mkdir(test_dir, perms);
-  fail_unless(res == 0, "Failed to create tmp directory '%s': %s", test_dir,
-    strerror(errno));
-
-  res = chmod(test_dir, perms);
-  fail_unless(res == 0, "Failed to set perms %04o on directory '%s': %s",
-    perms, test_dir, strerror(errno));
-
-  return 0;
-}
-
 static void set_up(void) {
   if (p == NULL) {
     p = permanent_pool = make_sub_pool(NULL);
   }
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("prometheus.db", 1, 20);
@@ -101,7 +85,7 @@ START_TEST (metric_init_test) {
   struct prom_dbh *dbh;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   dbh = prom_metric_init(NULL, NULL);
@@ -149,7 +133,7 @@ START_TEST (metric_create_test) {
   struct prom_metric *metric;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   metric = prom_metric_create(NULL, NULL, NULL);
@@ -201,7 +185,7 @@ START_TEST (metric_add_counter_test) {
   struct prom_metric *metric;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_add_counter(NULL, NULL, NULL);
@@ -246,7 +230,7 @@ START_TEST (metric_add_gauge_test) {
   struct prom_metric *metric;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_add_gauge(NULL, NULL, NULL);
@@ -284,6 +268,37 @@ START_TEST (metric_add_gauge_test) {
 }
 END_TEST
 
+START_TEST (metric_set_dbh_test) {
+  int res;
+  struct prom_metric *metric;
+  struct prom_dbh *dbh;
+
+  mark_point();
+  res = prom_metric_set_dbh(NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null metric");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* For purposes of testing, this does not have to be a real dbh. */
+  mark_point();
+  dbh = palloc(p, 8);
+  metric = prom_metric_create(p, "test", dbh);
+  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_set_dbh(metric, NULL);
+  fail_unless(res < 0, "Failed to handle null dbh");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_set_dbh(metric, dbh);
+  fail_unless(res == 0, "Failed to set dbh: %s", strerror(errno));
+
+  prom_metric_destroy(p, metric);
+}
+END_TEST
+
 START_TEST (metric_get_test) {
   int res;
   const char *name;
@@ -292,7 +307,7 @@ START_TEST (metric_get_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   results = prom_metric_get(NULL, NULL, 0);
@@ -359,7 +374,7 @@ START_TEST (metric_decr_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_decr(NULL, NULL, 0, NULL);
@@ -439,7 +454,7 @@ START_TEST (metric_incr_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_incr(NULL, NULL, 0, NULL);
@@ -519,7 +534,7 @@ START_TEST (metric_incr_counter_gauge_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
@@ -596,7 +611,7 @@ START_TEST (metric_set_test) {
   const array_header *results;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   res = prom_metric_set(NULL, NULL, 0, NULL);
@@ -675,7 +690,7 @@ START_TEST (metric_get_text_test) {
   pr_table_t *labels;
 
   (void) tests_rmpath(p, test_dir);
-  (void) create_test_dir();
+  (void) tests_mkpath(p, test_dir);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
@@ -761,6 +776,7 @@ Suite *tests_get_metric_suite(void) {
 
   tcase_add_test(testcase, metric_add_counter_test);
   tcase_add_test(testcase, metric_add_gauge_test);
+  tcase_add_test(testcase, metric_set_dbh_test);
 
   tcase_add_test(testcase, metric_get_test);
   tcase_add_test(testcase, metric_decr_test);

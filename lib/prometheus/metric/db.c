@@ -138,7 +138,7 @@ static int metrics_db_truncate_tables(pool *p, struct prom_dbh *dbh) {
 
 int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
     const char *metric_name, int metric_type, int64_t *row_id) {
-  int res;
+  int res, xerrno;
   const char *stmt, *errstr = NULL;
   array_header *results;
 
@@ -168,6 +168,9 @@ int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
@@ -189,7 +192,7 @@ int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
 
 int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
     const char *metric_name) {
-  int res;
+  int res, xerrno;
   const char *stmt, *errstr = NULL;
   array_header *results;
 
@@ -213,6 +216,9 @@ int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
@@ -230,7 +236,7 @@ int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
 
 int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
     int64_t metric_id, const char *sample_labels) {
-  int res;
+  int res, xerrno;
   const char *stmt, *errstr = NULL;
   array_header *results;
 
@@ -258,6 +264,9 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
@@ -275,7 +284,7 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
 
 static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
     double sample_val, const char *sample_labels) {
-  int res;
+  int res, xerrno;
   const char *stmt, *errstr = NULL;
   array_header *results;
 
@@ -304,6 +313,9 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
@@ -316,7 +328,7 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
 
 static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
     int64_t metric_id, double sample_val, const char *sample_labels) {
-  int res;
+  int res, xerrno;
   const char *errstr = NULL;
   array_header *results;
 
@@ -344,6 +356,9 @@ static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
@@ -440,7 +455,7 @@ int prom_metric_db_sample_set(pool *p, struct prom_dbh *dbh,
 
 const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
     int64_t metric_id) {
-  int res;
+  int res, xerrno;
   const char *stmt, *errstr = NULL;
   array_header *results;
 
@@ -463,6 +478,9 @@ const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
       "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));

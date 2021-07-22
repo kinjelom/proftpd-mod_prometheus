@@ -760,6 +760,8 @@ static int get_schema_version(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     *schema_version = 0;
     return 0;
@@ -832,10 +834,13 @@ static int set_schema_version(pool *p, struct prom_dbh *dbh,
   }
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
+  xerrno = errno;
+  (void) prom_db_finish_stmt(p, dbh, stmt);
+
   if (results == NULL) {
     (void) pr_log_debug(DEBUG3, MOD_PROMETHEUS_VERSION
       ": error executing statement '%s': %s", stmt,
-      errstr ? errstr : strerror(errno));
+      errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }

@@ -99,17 +99,29 @@ END_TEST
 
 START_TEST (http_start_test) {
   int res;
+  pr_netaddr_t *addr;
   struct prom_http *http;
   struct prom_registry *registry;
 
   mark_point();
-  http = prom_http_start(NULL, 0, NULL);
+  http = prom_http_start(NULL, NULL, NULL);
   fail_unless(http == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  http = prom_http_start(p, 0, NULL);
+  http = prom_http_start(p, NULL, NULL);
+  fail_unless(http == NULL, "Failed to handle null addr");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  addr = pr_netaddr_alloc(p);
+  pr_netaddr_set_family(addr, AF_INET);
+  pr_netaddr_set_sockaddr_any(addr);
+  pr_netaddr_set_port2(addr, 0);
+
+  http = prom_http_start(p, addr, NULL);
   fail_unless(http == NULL, "Failed to handle null registry");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -118,7 +130,7 @@ START_TEST (http_start_test) {
 
   /* Note: We don't need a real registry here, just a non-null pointer. */
   registry = pcalloc(p, 8);
-  http = prom_http_start(p, 0, registry);
+  http = prom_http_start(p, addr, registry);
   fail_unless(http != NULL, "Failed to start http: %s", strerror(errno));
 
   mark_point();

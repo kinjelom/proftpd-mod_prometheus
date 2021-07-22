@@ -50,7 +50,7 @@ const struct prom_metric *prom_registry_get_metric(
 int prom_registry_set_dbh(struct prom_registry *registry, struct prom_dbh *dbh);
 
 /* Caches a sorted list of metric names, for use in generating the text. */
-int prom_registry_sort_metrics(pool *p, struct prom_registry *registry);
+int prom_registry_sort_metrics(struct prom_registry *registry);
 
 struct prom_registry *prom_registry_init(pool *p, const char *name);
 int prom_registry_free(struct prom_registry *registry);

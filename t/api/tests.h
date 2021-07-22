@@ -35,6 +35,7 @@
 # error "Missing Check installation; necessary for ProFTPD testsuite"
 #endif
 
+int tests_mkpath(pool *p, const char *path);
 int tests_rmpath(pool *p, const char *path);
 
 Suite *tests_get_db_suite(void);

@@ -30,7 +30,7 @@
 
 struct prom_http;
 
-struct prom_http *prom_http_start(pool *p, unsigned short http_port,
+struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
   struct prom_registry *registry);
 
 /* This function will exit once the exporter finishes. */
