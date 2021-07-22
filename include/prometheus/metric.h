@@ -38,6 +38,8 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   const char *help_text);
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   const char *help_text);
+int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
+  const char *help_text);
 int prom_metric_set_dbh(struct prom_metric *metric, struct prom_dbh *dbh);
 
 /* Returns the metric name. */
@@ -53,6 +55,12 @@ int prom_metric_decr(pool *p, const struct prom_metric *metric, uint32_t decr,
  * counter/gauge records associated with this metric.
  */
 int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t incr,
+  pr_table_t *labels);
+
+/* Observe the specified metric by the given `val`; apply to any
+ * histogram records associated with this metric.
+ */
+int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,
   pr_table_t *labels);
 
 /* Setl the specified metric by the given `val`; applies to any

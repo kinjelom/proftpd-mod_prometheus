@@ -32,18 +32,21 @@ struct prom_metric {
   struct prom_dbh *dbh;
   const char *name;
 
+  /* Counter */
   int64_t counter_id;
   const char *counter_name;
   size_t counter_namelen;
   const char *counter_help;
   size_t counter_helplen;
 
+  /* Gauge */
   int64_t gauge_id;
   const char *gauge_name;
   size_t gauge_namelen;
   const char *gauge_help;
   size_t gauge_helplen;
 
+  /* Histogram */
   int64_t histogram_id;
   const char *histogram_name;
   size_t histogram_namelen;
@@ -374,6 +377,38 @@ int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
   return res;
 }
 
+int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,
+    pr_table_t *labels) {
+  int res;
+  pool *tmp_pool;
+  struct prom_text *text;
+  const char *label_str;
+
+  if (p == NULL ||
+      metric == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Observe operation only supported for histograms. */
+  if (metric->histogram_name == NULL) {
+    errno = EPERM;
+    return -1;
+  }
+
+  tmp_pool = make_sub_pool(p);
+  text = prom_text_create(tmp_pool);
+  label_str = prom_text_from_labels(tmp_pool, text, labels);
+
+  /* TODO: Finish sampling for histograms. */
+  res = 0;
+
+  prom_text_destroy(text);
+  destroy_pool(tmp_pool);
+
+  return res;
+}
+
 int prom_metric_set(pool *p, const struct prom_metric *metric, uint32_t val,
     pr_table_t *labels) {
   int res, xerrno;
@@ -491,6 +526,51 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   }
 
   metric->gauge_id = gauge_id;
+  return 0;
+}
+
+int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
+    const char *help_text) {
+  int res;
+  int64_t histogram_id;
+
+  if (metric == NULL ||
+      help_text == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (suffix != NULL) {
+    metric->histogram_name = pstrcat(metric->pool, metric->name, "_", suffix,
+      NULL);
+
+  } else {
+    metric->histogram_name = metric->name;
+  }
+
+  metric->histogram_namelen = strlen(metric->histogram_name);
+  metric->histogram_help = pstrdup(metric->pool, help_text);
+  metric->histogram_helplen = strlen(metric->histogram_help);
+
+  res = prom_metric_db_exists(metric->pool, metric->dbh,
+    metric->histogram_name);
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
+      metric->histogram_name);
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_metric_db_create(metric->pool, metric->dbh, metric->histogram_name,
+    PROM_METRIC_TYPE_HISTOGRAM, &histogram_id);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
+      metric->histogram_name, strerror(errno));
+    errno = EEXIST;
+    return -1;
+  }
+
+  metric->histogram_id = histogram_id;
   return 0;
 }
 

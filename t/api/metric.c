@@ -255,8 +255,54 @@ START_TEST (metric_add_gauge_test) {
 
   mark_point();
   suffix = "count";
-  res = prom_metric_add_counter(metric, suffix, "testing");
+  res = prom_metric_add_gauge(metric, suffix, "testing");
   fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_destroy(p, metric);
+  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+
+  res = prom_metric_free(p, dbh);
+  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  (void) tests_rmpath(p, test_dir);
+}
+END_TEST
+
+START_TEST (metric_add_histogram_test) {
+  int res;
+  const char *name, *suffix;
+  struct prom_dbh *dbh;
+  struct prom_metric *metric;
+
+  (void) tests_rmpath(p, test_dir);
+  (void) tests_mkpath(p, test_dir);
+
+  mark_point();
+  res = prom_metric_add_histogram(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null metric");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_metric_init(p, test_dir);
+  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+
+  mark_point();
+  name = "test";
+  metric = prom_metric_create(p, name, dbh);
+  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_add_histogram(metric, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null help");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  suffix = "count";
+  res = prom_metric_add_histogram(metric, suffix, "testing");
+  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+    strerror(errno));
 
   mark_point();
   res = prom_metric_destroy(p, metric);
@@ -601,6 +647,89 @@ START_TEST (metric_incr_counter_gauge_test) {
 }
 END_TEST
 
+START_TEST (metric_observe_test) {
+  int res;
+  const char *name;
+  struct prom_dbh *dbh;
+  struct prom_metric *metric;
+  double observed_val = 3.1415;
+  pr_table_t *labels;
+  const array_header *results;
+
+  (void) tests_rmpath(p, test_dir);
+  (void) tests_mkpath(p, test_dir);
+
+  mark_point();
+  res = prom_metric_observe(NULL, NULL, 0, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_observe(p, NULL, 0, NULL);
+  fail_unless(res < 0, "Failed to handle null metric");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_metric_init(p, test_dir);
+  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+
+  mark_point();
+  name = "test";
+  metric = prom_metric_create(p, name, dbh);
+  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_observe(p, metric, observed_val, NULL);
+  fail_unless(res < 0, "Failed to handle histogram-less metric");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_add_histogram(metric, "units", "testing");
+  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+    strerror(errno));
+
+  mark_point();
+  res = prom_metric_observe(p, metric, observed_val, NULL);
+  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
+
+  mark_point();
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM);
+
+  /* TODO: Finish histogram implementation. */
+  fail_unless(results == NULL, "Handled histograms unexpectedly");
+  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
+    strerror(errno), errno);
+
+  /* Now, provide labels. */
+  labels = pr_table_nalloc(p, 0, 2);
+  (void) pr_table_add_dup(labels, "protocol", "ftp", 0);
+  (void) pr_table_add_dup(labels, "foo", "BAR", 0);
+
+  mark_point();
+  res = prom_metric_observe(p, metric, observed_val, labels);
+  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
+
+  mark_point();
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM);
+
+  /* TODO: Finish histogram implementation. */
+  fail_unless(results == NULL, "Handled histograms unexpectedly");
+  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_destroy(p, metric);
+  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+
+  res = prom_metric_free(p, dbh);
+  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  (void) tests_rmpath(p, test_dir);
+}
+END_TEST
+
 START_TEST (metric_set_test) {
   int res;
   const char *name;
@@ -776,12 +905,14 @@ Suite *tests_get_metric_suite(void) {
 
   tcase_add_test(testcase, metric_add_counter_test);
   tcase_add_test(testcase, metric_add_gauge_test);
+  tcase_add_test(testcase, metric_add_histogram_test);
   tcase_add_test(testcase, metric_set_dbh_test);
 
   tcase_add_test(testcase, metric_get_test);
   tcase_add_test(testcase, metric_decr_test);
   tcase_add_test(testcase, metric_incr_test);
   tcase_add_test(testcase, metric_incr_counter_gauge_test);
+  tcase_add_test(testcase, metric_observe_test);
   tcase_add_test(testcase, metric_set_test);
 
   tcase_add_test(testcase, metric_get_text_test);
