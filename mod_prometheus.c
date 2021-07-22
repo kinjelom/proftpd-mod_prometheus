@@ -1848,42 +1848,6 @@ static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
   }
 }
 
-static void prom_ssh2_sftp_sess_opened_ev(const void *event_data,
-    void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  prom_event_incr("session", 1, NULL);
-}
-
-static void prom_ssh2_sftp_sess_closed_ev(const void *event_data,
-    void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  prom_event_incr("session", -1, NULL);
-}
-
-static void prom_ssh2_scp_sess_opened_ev(const void *event_data,
-    void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  prom_event_incr("session", 1, NULL);
-}
-
-static void prom_ssh2_scp_sess_closed_ev(const void *event_data,
-    void *user_data) {
-  if (prometheus_engine == FALSE) {
-    return;
-  }
-
-  prom_event_incr("session", -1, NULL);
-}
-
 /* Initialization routines
  */
 
@@ -1970,17 +1934,8 @@ static int prom_sess_init(void) {
     pr_event_register(&prometheus_module, "mod_sftp.ssh2.auth-publickey.failed",
       prom_ssh2_auth_publickey_err_ev, NULL);
 
-    pr_event_register(&prometheus_module, "mod_sftp.sftp.session-opened",
-      prom_ssh2_sftp_sess_opened_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_sftp.sftp.session-closed",
-      prom_ssh2_sftp_sess_closed_ev, NULL);
     pr_event_register(&prometheus_module, "mod_sftp.sftp.protocol-version",
       prom_ssh2_sftp_proto_version_ev, NULL);
-
-    pr_event_register(&prometheus_module, "mod_sftp.scp.session-opened",
-      prom_ssh2_scp_sess_opened_ev, NULL);
-    pr_event_register(&prometheus_module, "mod_sftp.scp.session-closed",
-      prom_ssh2_scp_sess_closed_ev, NULL);
   }
 
   /* Close any database handle inherited from our parent, and open a new
