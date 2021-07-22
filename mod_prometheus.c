@@ -546,7 +546,7 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
   size_t addrlen;
   config_rec *c;
   pr_netaddr_t *exporter_addr;
-  unsigned short exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
+  int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
@@ -1276,8 +1276,6 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
 
 #if defined(PR_SHARED_MODULE)
 static void prom_mod_unload_ev(const void *event_data, void *user_data) {
-  register unsigned int i;
-
   if (strcmp((const char *) event_data, "mod_prometheus.c") != 0) {
     return;
   }
