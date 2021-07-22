@@ -44,7 +44,6 @@ pool *prometheus_pool = NULL;
 
 static int prometheus_engine = FALSE;
 static unsigned long prometheus_opts = 0UL;
-static struct timeval prometheus_start_tv;
 static const char *prometheus_tables_dir = NULL;
 
 static struct prom_dbh *prometheus_dbh = NULL;
@@ -455,6 +454,69 @@ static void prom_exporter_stop(pid_t exporter_pid) {
   prometheus_exporter_http = NULL;
 }
 
+static pr_table_t *prom_get_labels(pool *p) {
+  pr_table_t *labels;
+
+  labels = pr_table_nalloc(p, 0, 2);
+  (void) pr_table_add(labels, "protocol", pr_session_get_protocol(0), 0);
+
+  return labels;
+}
+
+static void prom_event_incr(const char *metric_name, int32_t incr, ...) {
+  pool *tmp_pool;
+  int res;
+  va_list ap;
+  char *key;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
+
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric == NULL) {
+    pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
+      metric_name);
+    return;
+  }
+
+  if (session.pool != NULL) {
+    tmp_pool = make_sub_pool(session.pool);
+
+  } else {
+    tmp_pool = make_sub_pool(prometheus_pool);
+  }
+
+  labels = prom_get_labels(tmp_pool);
+  va_start(ap, incr);
+  key = va_arg(ap, char *);
+  while (key != NULL) {
+    char *val;
+
+    pr_signals_handle();
+
+    val = va_arg(ap, char *);
+    (void) pr_table_add_dup(labels, key, val, 0);
+
+    key = va_arg(ap, char *);
+  }
+  va_end(ap);
+
+  if (incr >= 0) {
+    res = prom_metric_incr(tmp_pool, metric, incr, labels);
+
+  } else {
+    res = prom_metric_decr(tmp_pool, metric, -incr, labels);
+  }
+
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error %s %s: %s",
+      incr < 0 ? "decrementing" : "incrementing", metric_name,
+      strerror(errno));
+  }
+
+  destroy_pool(tmp_pool);
+}
+
 /* Configuration handlers
  */
 
@@ -695,81 +757,215 @@ MODRET set_prometheustables(cmd_rec *cmd) {
  */
 
 MODRET prom_pre_list(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "directory_list";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_list(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "directory_list";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_err_list(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "directory_list";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
+  metric_name = "directory_list_error";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    /* TODO: Add a reason label for the error? */
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
+  return PR_DECLINED(cmd);
+}
+
+MODRET prom_pre_user(cmd_rec *cmd) {
+  const char *metric_name;
+  const struct prom_metric *metric;
+
+  if (prometheus_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
+  metric_name = "login";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_pass(cmd_rec *cmd) {
-  const char *proto; 
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "login";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
-MODRET prom_err_pass(cmd_rec *cmd) {
-  const char *proto;
+MODRET prom_err_login(cmd_rec *cmd) {
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "login";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
+  metric_name = "login_error";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    /* TODO: Add a reason label for the error? */
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_pre_retr(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "file_download";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_retr(cmd_rec *cmd) {
-  const char *proto;
-  uint32_t retr_kb;
-  off_t rem_bytes;
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "file_download";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
 
   /* We also need to increment the KB download count.  We know the number
    * of bytes downloaded as an off_t here, but we only store the number of KB
@@ -783,47 +979,108 @@ MODRET prom_log_retr(cmd_rec *cmd) {
    * variable as a "holding bucket" of bytes, from which we get the KB to add
    * to the db tables.
    */
-  prometheus_retr_bytes += session.xfer.total_bytes;
 
-  retr_kb = (prometheus_retr_bytes / 1024);
-  rem_bytes = (prometheus_retr_bytes % 1024);
+  metric_name = "file_download_bytes";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    uint32_t retr_kb;
+    off_t rem_bytes;
 
-  prometheus_retr_bytes = rem_bytes;
+    prometheus_retr_bytes += session.xfer.total_bytes;
+    retr_kb = (prometheus_retr_bytes / 1024);
+    rem_bytes = (prometheus_retr_bytes % 1024);
+    prometheus_retr_bytes = rem_bytes;
+
+    /* TODO: Update with the histogram function, once implemented. */
+    prom_metric_incr(cmd->tmp_pool, metric, retr_kb, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_err_retr(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "file_download";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
+  metric_name = "file_download_error";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    /* TODO: Add a reason label for the error? */
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_pre_stor(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "file_upload";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_stor(cmd_rec *cmd) {
-  const char *proto;
-  uint32_t stor_kb;
-  off_t rem_bytes;
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "file_upload";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
 
   /* We also need to increment the KB upload count.  We know the number
    * of bytes downloaded as an off_t here, but we only store the number of KB
@@ -837,36 +1094,75 @@ MODRET prom_log_stor(cmd_rec *cmd) {
    * variable as a "holding bucket" of bytes, from which we get the KB to add
    * to the db tables.
    */
-  prometheus_stor_bytes += session.xfer.total_bytes;
 
-  stor_kb = (prometheus_stor_bytes / 1024);
-  rem_bytes = (prometheus_stor_bytes % 1024);
+  metric_name = "file_upload_bytes";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    uint32_t stor_kb;
+    off_t rem_bytes;
 
-  prometheus_stor_bytes = rem_bytes;
+    prometheus_stor_bytes += session.xfer.total_bytes;
+    stor_kb = (prometheus_stor_bytes / 1024);
+    rem_bytes = (prometheus_stor_bytes % 1024);
+    prometheus_stor_bytes = rem_bytes;
+
+    /* TODO: Update with the histogram function, once implemented. */
+    prom_metric_incr(cmd->tmp_pool, metric, stor_kb, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_err_stor(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  proto = pr_session_get_protocol(0);
+  labels = prom_get_labels(cmd->tmp_pool);
+
+  metric_name = "file_upload";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
+  metric_name = "file_upload_error";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    /* TODO: Add a reason label for the error? */
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_auth(cmd_rec *cmd) {
-  const char *proto;
+  const char *metric_name;
+  const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
   /* Note: we are not currently properly incrementing
-   * session_count/session_total{protocol="ftps"} for FTPS connections
-   * accepted using the UseImplicitSSL TLSOption.
+   * session{protocol="ftps"} for FTPS connections accepted using the
+   * UseImplicitSSL TLSOption.
    *
    * The issue is that for those connections, the protocol will be set to
    * "ftps" in mod_tls' sess_init callback.  But here in mod_prometheus, we
@@ -875,52 +1171,39 @@ MODRET prom_log_auth(cmd_rec *cmd) {
    * increment those counts for implicit FTPS connections.
    */
 
-  proto = pr_session_get_protocol(0);
+  metric_name = "tls_protocol";
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    pr_table_t *labels;
+    const char *tls_version;
+
+    labels = prom_get_labels(cmd->tmp_pool);
+
+    tls_version = pr_table_get(session.notes, "TLS_PROTOCOL", NULL);
+    if (tls_version == NULL) {
+      /* Try the environment. */
+      tls_version = pr_env_get(cmd->tmp_pool, "TLS_PROTOCOL");
+    }
+
+    if (tls_version != NULL) {
+      (void) pr_table_add_dup(labels, "version", tls_version, 0);
+    }
+
+    prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
+
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
+  }
+
   return PR_DECLINED(cmd);
 }
 
 /* Event listeners
  */
 
-static void ev_incr_value(const char *metric_name, int32_t incr,
-    pr_table_t *labels) {
-  int res;
-  pool *p;
-  const struct prom_metric *metric;
-
-  p = session.pool;
-  if (p == NULL) {
-    p = prometheus_pool;
-  }
-
-  metric = prom_registry_get_metric(prometheus_registry, metric_name);
-  if (metric == NULL) {
-    pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
-      metric_name);
-    return;
-  }
-
-/* XXX need to add protocol label, others */
-
-  if (incr >= 0) {
-    res = prom_metric_incr(p, metric, incr, labels);
-
-  } else {
-    res = prom_metric_decr(p, metric, -incr, labels);
-  }
-
-  if (res < 0) {
-    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
-      "error %s %s: %s",
-      incr < 0 ? "decrementing" : "incrementing", metric_name,
-      strerror(errno));
-  }
-}
-
 static void prom_auth_code_ev(const void *event_data, void *user_data) {
   int auth_code;
-  const char *metric_name = NULL;
-  pr_table_t *labels = NULL;
 
   if (prometheus_engine == FALSE) {
     return;
@@ -930,68 +1213,55 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
 
   switch (auth_code) {
     case PR_AUTH_RFC2228_OK:
-      metric_name = "login_total";
-      /* pr_table_add(labels, "method", "certificate") */
+      prom_event_incr("login", 1, "method", "certificate", NULL);
       break;
 
     case PR_AUTH_OK:
-      metric_name = "login_total";
+      prom_event_incr("login", 1, "method", "password", NULL);
       break;
 
     case PR_AUTH_NOPWD:
-      metric_name = "login_err_total";
-      /* pr_table_add(labels, "reason", "unknown user") */
+      prom_event_incr("login_error", 1, "reason", "unknown user", NULL);
       break;
 
     case PR_AUTH_BADPWD:
-      metric_name = "login_err_total";
-      /* pr_table_add(labels, "reason", "bad password") */
+      prom_event_incr("login_error", 1, "reason", "bad password", NULL);
       break;
 
     default:
-      metric_name = "login_err_total";
+      prom_event_incr("login_error", 1, NULL);
       break;
   }
- 
-  ev_incr_value(metric_name, 1, labels); 
 }
 
 static void prom_exit_ev(const void *event_data, void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
-
-  ev_incr_value("connection_count", -1, NULL);
 
   switch (session.disconnect_reason) {
     case PR_SESS_DISCONNECT_BANNED:
     case PR_SESS_DISCONNECT_CONFIG_ACL:
     case PR_SESS_DISCONNECT_MODULE_ACL:
-    case PR_SESS_DISCONNECT_SESSION_INIT_FAILED:
-      /* XXX Add labels for refusal reason? */
-      ev_incr_value("connection_refused_total", 1, NULL);
+    case PR_SESS_DISCONNECT_SESSION_INIT_FAILED: {
+      const void *reason;
+
+      reason = pr_table_get(session.notes, "core.disconnect-details", NULL);
+      if (reason != NULL) {
+        prom_event_incr("connection_refused", 1, "reason", reason, NULL);
+
+      } else {
+        prom_event_incr("connection_refused", 1, NULL);
+      }
       break;
+    }
 
     case PR_SESS_DISCONNECT_SEGFAULT:
-      ev_incr_value("segfault_total", 1, NULL);
+      prom_event_incr("segfault", 1, NULL);
       break;
 
     default: {
-      const char *proto;
-
-      proto = pr_session_get_protocol(0);
-
-      ev_incr_value("session_count", -1, NULL);
-      ev_incr_value("session_total", 1, NULL);
-
-      if (strcmp(proto, "ftp") == 0 &&
-          session.anon_config != NULL) {
-        /* XXX pr_table_add(labels, "method", "anonymous") */
-        ev_incr_value("login_count", -1, labels);
-      }
-
+      prom_event_incr("session", -1, NULL);
       break;
     }
   }
@@ -1387,7 +1657,8 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
 static void prom_shutdown_ev(const void *event_data, void *user_data) {
   prom_exporter_stop(prometheus_exporter_pid);
 
-  /* XXX Need to close various database tables here. */
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  prometheus_dbh = NULL;
 
   destroy_pool(prometheus_pool);
   prometheus_pool = NULL;
@@ -1407,78 +1678,57 @@ static void prom_startup_ev(const void *event_data, void *user_data) {
     prometheus_engine = FALSE;
     return;
   }
-
-/* XXX Add build_info metric, start_timestamp */
-  gettimeofday(&prometheus_start_tv, NULL);
 }
 
 static void prom_timeout_idle_ev(const void *event_data, void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "reason", "idle") */
-  ev_incr_value("timeout_total", 1, labels);
+  prom_event_incr("timeout", 1, "reason", "TimeoutIdle", NULL);
 }
 
 static void prom_timeout_login_ev(const void *event_data, void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "reason", "login") */
-  ev_incr_value("timeout_total", 1, labels);
+  prom_event_incr("timeout", 1, "reason", "TimeoutLogin", NULL);
 }
 
 static void prom_timeout_noxfer_ev(const void *event_data, void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "reason", "notransfer") */
-  ev_incr_value("timeout_total", 1, labels);
+  prom_event_incr("timeout", 1, "reason", "TimeoutNoTransfer", NULL);
 }
 
 static void prom_timeout_stalled_ev(const void *event_data, void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "reason", "stalled") */
-  ev_incr_value("timeout_total", 1, labels);
+  prom_event_incr("timeout", 1, "reason", "TimeoutStalled", NULL);
 }
 
 /* mod_tls-generated events */
 static void prom_tls_ctrl_handshake_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "connection", "ctrl") */
-  ev_incr_value("handshake_error_total", 1, labels);
+  prom_event_incr("handshake_error", 1, "connection", "ctrl", NULL);
 }
 
 static void prom_tls_data_handshake_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
   
-/* XXX pr_table_add(labels, "connection", "data") */
-  ev_incr_value("handshake_error_total", 1, labels);
+  prom_event_incr("handshake_error", 1, "connection", "data", NULL);
 }
 
 /* mod_sftp-generated events */
@@ -1487,113 +1737,84 @@ static void prom_ssh2_kex_err_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  ev_incr_value("handshake_error_total", 1, NULL);
+  prom_event_incr("handshake_error", 1, NULL);
 }
 
 static void prom_ssh2_auth_hostbased_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "hostbased") */
-  ev_incr_value("login_count", 1, labels);
-  ev_incr_value("login_total", 1, labels);
+  prom_event_incr("login", 1, "method", "hostbased", NULL);
 }
 
 static void prom_ssh2_auth_hostbased_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "hostbased") */
-  ev_incr_value("login_error_total", 1, labels);
+  prom_event_incr("login_error", 1, "method", "hostbased", NULL);
 }
 
 static void prom_ssh2_auth_kbdint_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "keyboard-interactive") */
-  ev_incr_value("login_count", 1, labels);
-  ev_incr_value("login_total", 1, labels);
+  prom_event_incr("login", 1, "method", "keyboard-interactive", NULL);
 }
 
 static void prom_ssh2_auth_kbdint_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "keyboard-interactive") */
-  ev_incr_value("login_error_total", 1, labels);
+  prom_event_incr("login_error", 1, "method", "keyboard-interactive", NULL);
 }
 
 static void prom_ssh2_auth_passwd_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "password") */
-  ev_incr_value("login_count", 1, labels);
-  ev_incr_value("login_total", 1, labels);
+  prom_event_incr("login", 1, "method", "password", NULL);
 }
 
 static void prom_ssh2_auth_passwd_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "password") */
-  ev_incr_value("login_error_total", 1, labels);
+  prom_event_incr("login_error", 1, "method", "password", NULL);
 }
 
 static void prom_ssh2_auth_publickey_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "publickey") */
-  ev_incr_value("login_count", 1, labels);
-  ev_incr_value("login_total", 1, labels);
+  prom_event_incr("login", 1, "method", "publickey", NULL);
 }
 
 static void prom_ssh2_auth_publickey_err_ev(const void *event_data,
     void *user_data) {
-  pr_table_t *labels = NULL;
-
   if (prometheus_engine == FALSE) {
     return;
   }
 
-/* XXX pr_table_add(labels, "method", "publickey") */
-  ev_incr_value("login_error_total", 1, labels);
+  prom_event_incr("login_error", 1, "method", "publickey", NULL);
 }
 
 static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
     void *user_data) {
   unsigned long protocol_version;
-  pr_table_t *labels = NULL;
 
   if (prometheus_engine == FALSE) {
     return;
@@ -1608,28 +1829,25 @@ static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
 
   switch (protocol_version) {
     case 3:
-      /* XXX pr_table_add(labels, "version", "3") */
+      prom_event_incr("sftp_protocol", 1, "version", "3", NULL);
       break;
 
     case 4:
-      /* XXX pr_table_add(labels, "version", "4") */
+      prom_event_incr("sftp_protocol", 1, "version", "4", NULL);
       break;
 
     case 5:
-      /* XXX pr_table_add(labels, "version", "5") */
+      prom_event_incr("sftp_protocol", 1, "version", "5", NULL);
       break;
 
     case 6:
-      /* XXX pr_table_add(labels, "version", "6") */
+      prom_event_incr("sftp_protocol", 1, "version", "6", NULL);
       break;
 
     default:
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "unknown SFTP protocol version %lu, ignoring", protocol_version);
-      return;
   }
-
-  ev_incr_value("sftp_protocol_total", 1, labels);
 }
 
 static void prom_ssh2_sftp_sess_opened_ev(const void *event_data,
@@ -1638,8 +1856,7 @@ static void prom_ssh2_sftp_sess_opened_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value("session_count", 1, NULL);
-  ev_incr_value("session_total", 1, NULL);
+  prom_event_incr("session", 1, NULL);
 }
 
 static void prom_ssh2_sftp_sess_closed_ev(const void *event_data,
@@ -1648,7 +1865,7 @@ static void prom_ssh2_sftp_sess_closed_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value("session_count", -1, NULL);
+  prom_event_incr("session", -1, NULL);
 }
 
 static void prom_ssh2_scp_sess_opened_ev(const void *event_data,
@@ -1657,8 +1874,7 @@ static void prom_ssh2_scp_sess_opened_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value("session_count", 1, NULL);
-  ev_incr_value("session_total", 1, NULL);
+  prom_event_incr("session", 1, NULL);
 }
 
 static void prom_ssh2_scp_sess_closed_ev(const void *event_data,
@@ -1667,7 +1883,7 @@ static void prom_ssh2_scp_sess_closed_ev(const void *event_data,
     return;
   }
 
-  ev_incr_value("session_count", -1, NULL);
+  prom_event_incr("session", -1, NULL);
 }
 
 /* Initialization routines
@@ -1817,8 +2033,10 @@ static cmdtable prometheus_cmdtab[] = {
   { LOG_CMD,		C_NLST,	G_NONE,	prom_log_list,	FALSE,	FALSE },
   { LOG_CMD_ERR,	C_NLST,	G_NONE,	prom_err_list,	FALSE,	FALSE },
 
+  { PRE_CMD,		C_USER, G_NONE, prom_pre_user,	FALSE,	FALSE },
+  { LOG_CMD_ERR,	C_USER, G_NONE, prom_err_login,	FALSE,	FALSE },
   { LOG_CMD,		C_PASS,	G_NONE,	prom_log_pass,	FALSE,	FALSE },
-  { LOG_CMD_ERR,	C_PASS,	G_NONE,	prom_err_pass,	FALSE,	FALSE },
+  { LOG_CMD_ERR,	C_PASS,	G_NONE,	prom_err_login,	FALSE,	FALSE },
 
   { PRE_CMD,		C_RETR,	G_NONE,	prom_pre_retr,	FALSE,	FALSE },
   { LOG_CMD,		C_RETR,	G_NONE,	prom_log_retr,	FALSE,	FALSE },
