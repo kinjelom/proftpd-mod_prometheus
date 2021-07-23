@@ -88,6 +88,16 @@ static int metrics_db_add_schema(pool *p, struct prom_dbh *dbh,
     return -1;
   }
 
+  /* CREATE INDEX metric_id_sample_labels_idx */
+  stmt = "CREATE INDEX IF NOT EXISTS metric_id_sample_labels_idx ON metric_samples (metric_id, sample_labels);";
+  res = prom_db_exec_stmt(p, dbh, stmt, &errstr);
+  if (res < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error executing '%s': %s", stmt, errstr);
+    errno = EPERM;
+    return -1;
+  }
+
   return 0;
 }
 
@@ -578,6 +588,11 @@ struct prom_dbh *prom_metric_db_init(pool *p, const char *tables_path,
       strerror(xerrno));
     errno = xerrno;
     return NULL;
+  }
+
+  if (flags & PROM_DB_OPEN_FL_SKIP_TABLE_INIT) {
+    /* Skip adding/initializing tables. */
+    return dbh;
   }
 
   res = metrics_db_add_schema(p, dbh, db_path);

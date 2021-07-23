@@ -52,6 +52,7 @@ struct prom_dbh *prom_db_open_with_version(pool *p, const char *table_path,
 #define PROM_DB_OPEN_FL_INTEGRITY_CHECK			0x004
 #define PROM_DB_OPEN_FL_VACUUM				0x008
 #define PROM_DB_OPEN_FL_SKIP_VACUUM			0x010
+#define PROM_DB_OPEN_FL_SKIP_TABLE_INIT			0x020
 
 /* Open the existing database (with the given schema name) at the given path.
  * If the database/schema already exists, check that its schema version is

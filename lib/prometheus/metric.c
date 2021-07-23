@@ -362,13 +362,22 @@ int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
     res = prom_metric_db_sample_incr(p, metric->dbh, metric->counter_id,
       (double) val, label_str);
     xerrno = errno;
+
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
+        metric->counter_name, (unsigned long) val, strerror(xerrno));
+    }
   }
 
-  if (res == 0 &&
-      metric->gauge_name != NULL) {
+  if (metric->gauge_name != NULL) {
     res = prom_metric_db_sample_incr(p, metric->dbh, metric->gauge_id,
       (double) val, label_str);
     xerrno = errno;
+
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
+        metric->gauge_name, (unsigned long) val, strerror(xerrno));
+    }
   }
 
   prom_text_destroy(text);
@@ -482,6 +491,9 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   }
 
   metric->counter_id = counter_id;
+  pr_trace_msg(trace_channel, 27,
+    "added '%s' counter metric (ID %lld) to database", metric->counter_name,
+    metric->counter_id);
   return 0;
 }
 
@@ -526,6 +538,9 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   }
 
   metric->gauge_id = gauge_id;
+  pr_trace_msg(trace_channel, 27,
+    "added '%s' gauge metric (ID %lld) to database", metric->gauge_name,
+    metric->gauge_id);
   return 0;
 }
 
@@ -571,6 +586,9 @@ int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
   }
 
   metric->histogram_id = histogram_id;
+  pr_trace_msg(trace_channel, 27,
+    "added '%s' histogram metric (ID %lld) to database", metric->histogram_name,
+    metric->histogram_id);
   return 0;
 }
 

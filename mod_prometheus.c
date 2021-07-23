@@ -461,30 +461,18 @@ static pr_table_t *prom_get_labels(pool *p) {
   return labels;
 }
 
-static void prom_event_adj(const char *metric_name, int32_t val, ...) {
-  pool *tmp_pool;
-  int res;
-  va_list ap;
+static const struct prom_metric *prom_metric_with_labels(
+    const char *metric_name, pr_table_t *labels, va_list ap) {
   char *key;
   const struct prom_metric *metric;
-  pr_table_t *labels;
 
   metric = prom_registry_get_metric(prometheus_registry, metric_name);
   if (metric == NULL) {
     pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
       metric_name);
-    return;
+    return NULL;
   }
 
-  if (session.pool != NULL) {
-    tmp_pool = make_sub_pool(session.pool);
-
-  } else {
-    tmp_pool = make_sub_pool(prometheus_pool);
-  }
-
-  labels = prom_get_labels(tmp_pool);
-  va_start(ap, val);
   key = va_arg(ap, char *);
   while (key != NULL) {
     char *val;
@@ -498,33 +486,15 @@ static void prom_event_adj(const char *metric_name, int32_t val, ...) {
   }
   va_end(ap);
 
-  if (val >= 0) {
-    res = prom_metric_incr(tmp_pool, metric, val, labels);
-
-  } else {
-    res = prom_metric_decr(tmp_pool, metric, val, labels);
-  }
-
-  if (res < 0) {
-    pr_trace_msg(trace_channel, 19, "error %s %s: %s",
-      val < 0 ? "decrementing" : "incrementing", metric_name, strerror(errno));
-  }
-
-  destroy_pool(tmp_pool);
+  return metric;
 }
 
-static void prom_event_observe(const char *metric_name, double val) {
-  pool *tmp_pool;
+static void prom_event_decr(const char *metric_name, uint32_t decr, ...) {
   int res;
+  pool *tmp_pool;
+  va_list ap;
   const struct prom_metric *metric;
   pr_table_t *labels;
-
-  metric = prom_registry_get_metric(prometheus_registry, metric_name);
-  if (metric == NULL) {
-    pr_trace_msg(trace_channel, 17, "unknown metric name '%s' requested",
-      metric_name);
-    return;
-  }
 
   if (session.pool != NULL) {
     tmp_pool = make_sub_pool(session.pool);
@@ -534,7 +504,85 @@ static void prom_event_observe(const char *metric_name, double val) {
   }
 
   labels = prom_get_labels(tmp_pool);
-  res = prom_metric_observe(tmp_pool, metric, val, labels);
+
+  va_start(ap, decr);
+  metric = prom_metric_with_labels(metric_name, labels, ap);
+  va_end(ap);
+
+  if (metric == NULL) {
+    destroy_pool(tmp_pool);
+    return;
+  }
+
+  res = prom_metric_decr(tmp_pool, metric, decr, labels);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 19, "error decrementing %s: %s", metric_name,
+      strerror(errno));
+  }
+
+  destroy_pool(tmp_pool);
+}
+
+static void prom_event_incr(const char *metric_name, uint32_t incr, ...) {
+  int res;
+  pool *tmp_pool;
+  va_list ap;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
+
+  if (session.pool != NULL) {
+    tmp_pool = make_sub_pool(session.pool);
+
+  } else {
+    tmp_pool = make_sub_pool(prometheus_pool);
+  }
+
+  labels = prom_get_labels(tmp_pool);
+
+  va_start(ap, incr);
+  metric = prom_metric_with_labels(metric_name, labels, ap);
+  va_end(ap);
+
+  if (metric == NULL) {
+    destroy_pool(tmp_pool);
+    return;
+  }
+
+  res = prom_metric_incr(tmp_pool, metric, incr, labels);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 19, "error incrementing %s: %s", metric_name,
+      strerror(errno));
+  }
+
+  destroy_pool(tmp_pool);
+}
+
+static void prom_event_observe(const char *metric_name, double observed, ...) {
+  int res;
+  pool *tmp_pool;
+  va_list ap;
+  const struct prom_metric *metric;
+  pr_table_t *labels;
+
+  if (session.pool != NULL) {
+    tmp_pool = make_sub_pool(session.pool);
+
+  } else {
+    tmp_pool = make_sub_pool(prometheus_pool);
+  }
+
+  labels = prom_get_labels(tmp_pool);
+
+  va_start(ap, observed);
+  metric = prom_metric_with_labels(metric_name, labels, ap);
+  va_end(ap);
+
+  if (metric == NULL) {
+    destroy_pool(tmp_pool);
+    return;
+  }
+
+  res = prom_metric_observe(tmp_pool, metric, observed, labels);
   if (res < 0) {
     pr_trace_msg(trace_channel, 19, "error observing %s: %s", metric_name,
       strerror(errno));
@@ -874,6 +922,15 @@ MODRET prom_err_list(cmd_rec *cmd) {
 }
 
 MODRET prom_pre_user(cmd_rec *cmd) {
+  if (prometheus_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
+  prom_cmd_incr(cmd, "login", NULL);
+  return PR_DECLINED(cmd);
+}
+
+MODRET prom_log_pass(cmd_rec *cmd) {
   const char *metric_name;
   pr_table_t *labels;
   time_t now = 0;
@@ -882,20 +939,20 @@ MODRET prom_pre_user(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  metric_name = "login";
-  labels = prom_get_labels(cmd->tmp_pool);
-  prom_cmd_incr(cmd, metric_name, labels);
-  prom_cmd_observe(cmd, metric_name,
-    (double) now - prometheus_connected_ts, labels);
-  return PR_DECLINED(cmd);
-}
-
-MODRET prom_log_pass(cmd_rec *cmd) {
-  if (prometheus_engine == FALSE) {
-    return PR_DECLINED(cmd);
+  /* Easiest way for us to check for anonymous logins is here; the <Anonymous>
+   * auth flow does not use the "mod_auth.authentication-code" event.
+   */
+  if (session.sf_flags & SF_ANON) {
+    prom_event_incr("auth", 1, "method", "anonymous", NULL);
   }
 
-  prom_cmd_decr(cmd, "login", TRUE, NULL);
+  metric_name = "login";
+  labels = prom_get_labels(cmd->tmp_pool);
+  prom_cmd_decr(cmd, "login", TRUE, labels);
+
+  now = time(NULL);
+  prom_cmd_observe(cmd, metric_name,
+    (double) now - prometheus_connected_ts, labels);
   return PR_DECLINED(cmd);
 }
 
@@ -1034,25 +1091,56 @@ static void prom_auth_code_ev(const void *event_data, void *user_data) {
   auth_code = *((int *) event_data);
 
   switch (auth_code) {
+    case PR_AUTH_OK_NO_PASS:
+      prom_event_incr("auth", 1, "method", session.rfc2228_mech, NULL);
+      break;
+
     case PR_AUTH_RFC2228_OK:
-      prom_event_adj("auth", 1, "method", "certificate", NULL);
+      prom_event_incr("auth", 1, "method", "certificate", NULL);
       break;
 
     case PR_AUTH_OK:
-      prom_event_adj("auth", 1, "method", "password", NULL);
+      prom_event_incr("auth", 1, "method", "password", NULL);
       break;
 
     case PR_AUTH_NOPWD:
-      prom_event_adj("auth_error", 1, "reason", "unknown user", NULL);
+      prom_event_incr("auth_error", 1, "reason", "unknown user", NULL);
       break;
 
     case PR_AUTH_BADPWD:
-      prom_event_adj("auth_error", 1, "reason", "bad password", NULL);
+      prom_event_incr("auth_error", 1, "reason", "bad password", NULL);
       break;
 
     default:
-      prom_event_adj("auth_error", 1, NULL);
+      prom_event_incr("auth_error", 1, NULL);
       break;
+  }
+}
+
+static void prom_connect_ev(const void *event_data, void *user_data) {
+  int flags;
+  struct prom_dbh *dbh;
+
+  /* Close any database handle inherited from our parent, and open a new
+   * one, per SQLite3 recommendation.
+   *
+   * NOTE: session.pool does NOT exist yet.
+   */
+  (void) prom_db_close(prometheus_pool, prometheus_dbh);
+  prometheus_dbh = NULL;
+
+  flags = PROM_DB_OPEN_FL_VACUUM|PROM_DB_OPEN_FL_SKIP_TABLE_INIT;
+  dbh = prom_metric_db_init(prometheus_pool, prometheus_tables_dir, flags);
+  if (dbh == NULL) {
+    pr_trace_msg(trace_channel, 1,
+      "error initializing '%s' metrics db at connect time: %s",
+      prometheus_tables_dir, strerror(errno));
+
+  } else {
+    if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
+      pr_trace_msg(trace_channel, 3, "error setting registry dbh: %s",
+        strerror(errno));
+    }
   }
 }
 
@@ -1070,26 +1158,30 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
 
       reason = pr_table_get(session.notes, "core.disconnect-details", NULL);
       if (reason != NULL) {
-        prom_event_adj("connection_refused", 1, "reason", reason, NULL);
+        prom_event_incr("connection_refused", 1, "reason", reason, NULL);
 
       } else {
-        prom_event_adj("connection_refused", 1, NULL);
+        prom_event_incr("connection_refused", 1, NULL);
       }
       break;
     }
 
     case PR_SESS_DISCONNECT_SEGFAULT:
-      prom_event_adj("connection", -1, NULL);
-      prom_event_adj("segfault", 1, NULL);
+      prom_event_decr("connection", 1, NULL);
+      prom_event_incr("segfault", 1, NULL);
       break;
 
     default: {
       time_t now;
 
-      prom_event_adj("connection", -1, NULL);
+/* XXX What if we begin login, but didn't finish?  Should we decrement "login"
+ * here?
+ */
+      prom_event_decr("connection", 1, NULL);
 
       now = time(NULL);
-      prom_event_observe("connection", (double) now - prometheus_connected_ts);
+      prom_event_observe("connection", (double) now - prometheus_connected_ts,
+        NULL);
       break;
     }
   }
@@ -1313,6 +1405,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
 
   metric = prom_metric_create(prometheus_pool, "login", dbh);
   prom_metric_add_counter(metric, "total", "Number of logins");
+  prom_metric_add_gauge(metric, "count", "Current count of logins");
   prom_metric_add_histogram(metric, "delay_seconds",
     "Delay before login in seconds");
   res = prom_registry_add_metric(prometheus_registry, metric);
@@ -1431,7 +1524,7 @@ static void create_metrics(struct prom_dbh *dbh) {
     }
   }
 
-  metric = prom_metric_create(prometheus_pool, "startup_time_seconds", dbh);
+  metric = prom_metric_create(prometheus_pool, "startup_time", dbh);
   prom_metric_add_counter(metric, NULL,
     "ProFTPD startup time, in unixtime seconds");
   res = prom_registry_add_metric(prometheus_registry, metric);
@@ -1615,7 +1708,7 @@ static void prom_timeout_idle_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  prom_event_adj("timeout", 1, "reason", "TimeoutIdle", NULL);
+  prom_event_incr("timeout", 1, "reason", "TimeoutIdle", NULL);
 }
 
 static void prom_timeout_login_ev(const void *event_data, void *user_data) {
@@ -1623,7 +1716,7 @@ static void prom_timeout_login_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  prom_event_adj("timeout", 1, "reason", "TimeoutLogin", NULL);
+  prom_event_incr("timeout", 1, "reason", "TimeoutLogin", NULL);
 }
 
 static void prom_timeout_noxfer_ev(const void *event_data, void *user_data) {
@@ -1631,7 +1724,15 @@ static void prom_timeout_noxfer_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  prom_event_adj("timeout", 1, "reason", "TimeoutNoTransfer", NULL);
+  prom_event_incr("timeout", 1, "reason", "TimeoutNoTransfer", NULL);
+}
+
+static void prom_timeout_session_ev(const void *event_data, void *user_data) {
+  if (prometheus_engine == FALSE) {
+    return;
+  }
+
+  prom_event_incr("timeout", 1, "reason", "TimeoutSession", NULL);
 }
 
 static void prom_timeout_stalled_ev(const void *event_data, void *user_data) {
@@ -1639,7 +1740,7 @@ static void prom_timeout_stalled_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  prom_event_adj("timeout", 1, "reason", "TimeoutStalled", NULL);
+  prom_event_incr("timeout", 1, "reason", "TimeoutStalled", NULL);
 }
 
 /* mod_tls-generated events */
@@ -1649,7 +1750,7 @@ static void prom_tls_ctrl_handshake_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("handshake_error", 1, "connection", "ctrl", NULL);
+  prom_event_incr("handshake_error", 1, "connection", "ctrl", NULL);
 }
 
 static void prom_tls_data_handshake_err_ev(const void *event_data,
@@ -1658,7 +1759,7 @@ static void prom_tls_data_handshake_err_ev(const void *event_data,
     return;
   }
   
-  prom_event_adj("handshake_error", 1, "connection", "data", NULL);
+  prom_event_incr("handshake_error", 1, "connection", "data", NULL);
 }
 
 /* mod_sftp-generated events */
@@ -1667,7 +1768,7 @@ static void prom_ssh2_kex_err_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  prom_event_adj("handshake_error", 1, NULL);
+  prom_event_incr("handshake_error", 1, NULL);
 }
 
 static void prom_ssh2_auth_hostbased_ev(const void *event_data,
@@ -1676,7 +1777,7 @@ static void prom_ssh2_auth_hostbased_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth", 1, "method", "hostbased", NULL);
+  prom_event_incr("auth", 1, "method", "hostbased", NULL);
 }
 
 static void prom_ssh2_auth_hostbased_err_ev(const void *event_data,
@@ -1685,7 +1786,7 @@ static void prom_ssh2_auth_hostbased_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth_error", 1, "method", "hostbased", NULL);
+  prom_event_incr("auth_error", 1, "method", "hostbased", NULL);
 }
 
 static void prom_ssh2_auth_kbdint_ev(const void *event_data,
@@ -1694,7 +1795,7 @@ static void prom_ssh2_auth_kbdint_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth", 1, "method", "keyboard-interactive", NULL);
+  prom_event_incr("auth", 1, "method", "keyboard-interactive", NULL);
 }
 
 static void prom_ssh2_auth_kbdint_err_ev(const void *event_data,
@@ -1703,7 +1804,7 @@ static void prom_ssh2_auth_kbdint_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth_error", 1, "method", "keyboard-interactive", NULL);
+  prom_event_incr("auth_error", 1, "method", "keyboard-interactive", NULL);
 }
 
 static void prom_ssh2_auth_passwd_ev(const void *event_data,
@@ -1712,7 +1813,7 @@ static void prom_ssh2_auth_passwd_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth", 1, "method", "password", NULL);
+  prom_event_incr("auth", 1, "method", "password", NULL);
 }
 
 static void prom_ssh2_auth_passwd_err_ev(const void *event_data,
@@ -1721,7 +1822,7 @@ static void prom_ssh2_auth_passwd_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth_error", 1, "method", "password", NULL);
+  prom_event_incr("auth_error", 1, "method", "password", NULL);
 }
 
 static void prom_ssh2_auth_publickey_ev(const void *event_data,
@@ -1730,7 +1831,7 @@ static void prom_ssh2_auth_publickey_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth", 1, "method", "publickey", NULL);
+  prom_event_incr("auth", 1, "method", "publickey", NULL);
 }
 
 static void prom_ssh2_auth_publickey_err_ev(const void *event_data,
@@ -1739,7 +1840,7 @@ static void prom_ssh2_auth_publickey_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_adj("auth_error", 1, "method", "publickey", NULL);
+  prom_event_incr("auth_error", 1, "method", "publickey", NULL);
 }
 
 static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
@@ -1759,19 +1860,19 @@ static void prom_ssh2_sftp_proto_version_ev(const void *event_data,
 
   switch (protocol_version) {
     case 3:
-      prom_event_adj("sftp_protocol", 1, "version", "3", NULL);
+      prom_event_incr("sftp_protocol", 1, "version", "3", NULL);
       break;
 
     case 4:
-      prom_event_adj("sftp_protocol", 1, "version", "4", NULL);
+      prom_event_incr("sftp_protocol", 1, "version", "4", NULL);
       break;
 
     case 5:
-      prom_event_adj("sftp_protocol", 1, "version", "5", NULL);
+      prom_event_incr("sftp_protocol", 1, "version", "5", NULL);
       break;
 
     case 6:
-      prom_event_adj("sftp_protocol", 1, "version", "6", NULL);
+      prom_event_incr("sftp_protocol", 1, "version", "6", NULL);
       break;
 
     default:
@@ -1787,6 +1888,7 @@ static int prom_init(void) {
   prometheus_pool = make_sub_pool(permanent_pool);
   pr_pool_tag(prometheus_pool, MOD_PROMETHEUS_VERSION);
 
+  pr_event_register(&prometheus_module, "core.connect", prom_connect_ev, NULL);
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&prometheus_module, "core.module-unload",
     prom_mod_unload_ev, NULL);
@@ -1802,9 +1904,9 @@ static int prom_init(void) {
    * sess_init callback.  However, we use this listener to listen for
    * refused connections, e.g. connections refused by other modules'
    * sess_init callbacks.  And depending on the module load order, another
-   * module might refuse the connection before mod_snmp's sess_init callback
-   * is invoked, which would prevent mod_prometheus from registering its
-   * 'core.exit' event listener.
+   * module might refuse the connection before mod_prometheus's sess_init
+   * callback is invoked, which would prevent mod_prometheus from registering
+   * its ' core.exit' event listener.
    *
    * Thus to work around this timing issue, we register our 'core.exit' event
    * listener here, in the daemon process.  It should not hurt anything.
@@ -1815,9 +1917,12 @@ static int prom_init(void) {
 }
 
 static int prom_sess_init(void) {
-  struct prom_dbh *dbh;
   const char *metric_name;
   const struct prom_metric *metric;
+
+  if (prometheus_engine == FALSE) {
+    return 0;
+  }
 
   pr_event_register(&prometheus_module, "core.timeout-idle",
     prom_timeout_idle_ev, NULL);
@@ -1825,6 +1930,8 @@ static int prom_sess_init(void) {
     prom_timeout_login_ev, NULL);
   pr_event_register(&prometheus_module, "core.timeout-no-transfer",
     prom_timeout_noxfer_ev, NULL);
+  pr_event_register(&prometheus_module, "core.timeout-session",
+    prom_timeout_session_ev, NULL);
   pr_event_register(&prometheus_module, "core.timeout-stalled",
     prom_timeout_stalled_ev, NULL);
 
@@ -1872,18 +1979,6 @@ static int prom_sess_init(void) {
 
     pr_event_register(&prometheus_module, "mod_sftp.sftp.protocol-version",
       prom_ssh2_sftp_proto_version_ev, NULL);
-  }
-
-  /* Close any database handle inherited from our parent, and open a new
-   * one, per SQLite3 recommendation.
-   */
-  (void) prom_db_close(prometheus_pool, prometheus_dbh);
-  prometheus_dbh = NULL;
-  dbh = prom_metric_db_init(session.pool, prometheus_tables_dir,
-    PROM_DB_OPEN_FL_VACUUM);
-  if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
-    pr_trace_msg(trace_channel, 3, "error setting registry dbh: %s",
-      strerror(errno));
   }
 
   metric_name = "connection";
