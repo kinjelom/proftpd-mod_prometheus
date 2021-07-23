@@ -60,6 +60,27 @@ static pid_t prometheus_exporter_pid = 0;
  */
 static time_t prometheus_exporter_timeout = 1;
 
+static void prom_event_decr(const char *metric_name, uint32_t decr, ...)
+#if defined(__GNUC__)
+      __attribute__ ((sentinel));
+#else
+      ;
+#endif /* GNUC */
+
+static void prom_event_incr(const char *metric_name, uint32_t incr, ...)
+#if defined(__GNUC__)
+      __attribute__ ((sentinel));
+#else
+      ;
+#endif /* GNUC */
+
+static void prom_event_observe(const char *metric_name, double observed, ...)
+#if defined(__GNUC__)
+      __attribute__ ((sentinel));
+#else
+      ;
+#endif /* GNUC */
+
 static const char *trace_channel = "prometheus";
 
 static int prom_mkdir(const char *dir, uid_t uid, gid_t gid, mode_t mode) {
