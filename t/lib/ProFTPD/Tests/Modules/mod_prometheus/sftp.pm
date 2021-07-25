@@ -203,7 +203,7 @@ sub prom_scrape_metric_handshake_error_ssh2 {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_handshake_error_total{protocol="ssh2"} 1+$';
+      $expected = '^proftpd_handshake_error_total\{protocol="ssh2"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -349,7 +349,7 @@ sub prom_scrape_metric_sftp_protocol {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_sftp_protocol_total{protocol="sftp",version="3"} 1+$';
+      $expected = '^proftpd_sftp_protocol_total\{protocol="sftp",version="3"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));

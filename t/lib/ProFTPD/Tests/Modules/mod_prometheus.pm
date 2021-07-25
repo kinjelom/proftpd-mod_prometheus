@@ -267,10 +267,7 @@ sub list_tests {
   #  prom_scrape_metrics_uri_with_basic_auth
   #  prom_scrape_metrics_uri_with_gzip
 
-#  return testsuite_get_runnable_tests($TESTS);
-  return qw(
-    prom_scrape_metric_build_info
-  );
+  return testsuite_get_runnable_tests($TESTS);
 }
 
 # Support routines
@@ -1684,7 +1681,7 @@ sub prom_scrape_metric_auth_anon_ok {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_auth_total{method="anonymous",protocol="ftp"} 1+$';
+      $expected = '^proftpd_auth_total\{method="anonymous",protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -1813,7 +1810,7 @@ sub prom_scrape_metric_auth_error_unknown_user {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="unknown user"} 1+$';
+      $expected = '^proftpd_auth_error_total\{protocol="ftp",reason="unknown user"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -1942,7 +1939,7 @@ sub prom_scrape_metric_auth_error_bad_password {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="bad password"} 1+$';
+      $expected = '^proftpd_auth_error_total\{protocol="ftp",reason="bad password"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2068,7 +2065,7 @@ sub prom_scrape_metric_auth_error_incomplete {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="incomplete"} 1+$';
+      $expected = '^proftpd_auth_error_total\{protocol="ftp",reason="incomplete"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2229,7 +2226,7 @@ sub prom_scrape_metric_directory_list {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_directory_list_total{protocol="ftp"} 3+$';
+      $expected = '^proftpd_directory_list_total\{protocol="ftp"\} 3+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2245,7 +2242,7 @@ sub prom_scrape_metric_directory_list {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_directory_list_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_directory_list_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2387,7 +2384,7 @@ sub prom_scrape_metric_directory_list_error {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_directory_list_error_total{protocol="ftp"} 2+$';
+      $expected = '^proftpd_directory_list_error_total\{protocol="ftp"\} 2+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2528,7 +2525,7 @@ sub prom_scrape_metric_file_download {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_download_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_file_download_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2544,7 +2541,7 @@ sub prom_scrape_metric_file_download {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_download_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_file_download_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2677,7 +2674,7 @@ sub prom_scrape_metric_file_download_error {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_download_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_file_download_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2820,7 +2817,7 @@ sub prom_scrape_metric_file_upload {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_upload_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_file_upload_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2836,7 +2833,7 @@ sub prom_scrape_metric_file_upload {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_upload_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_file_upload_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2970,7 +2967,7 @@ sub prom_scrape_metric_file_upload_error {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_file_upload_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_file_upload_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3097,7 +3094,7 @@ sub prom_scrape_metric_login_succeeded {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3113,7 +3110,7 @@ sub prom_scrape_metric_login_succeeded {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3242,7 +3239,7 @@ sub prom_scrape_metric_login_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3258,7 +3255,7 @@ sub prom_scrape_metric_login_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3401,7 +3398,7 @@ sub prom_scrape_metric_login_user_quit {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3546,7 +3543,7 @@ sub prom_scrape_metric_login_user_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3681,7 +3678,7 @@ sub prom_scrape_metric_login_pass_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3697,7 +3694,7 @@ sub prom_scrape_metric_login_pass_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3839,7 +3836,7 @@ sub prom_scrape_metric_login_in_progress {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_count\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3967,7 +3964,7 @@ sub prom_scrape_metric_login_error_bad_user {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4093,7 +4090,7 @@ sub prom_scrape_metric_login_error_bad_password {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4222,7 +4219,7 @@ sub prom_scrape_metric_login_error_user_bad_pass_good_pass {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4350,7 +4347,7 @@ sub prom_scrape_metric_login_error_pass_multiple_times {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_error_total{protocol="ftp"} 3+$';
+      $expected = '^proftpd_login_error_total\{protocol="ftp"\} 3+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4485,7 +4482,7 @@ sub prom_scrape_metric_login_error_denied_acl {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $expected = '^proftpd_login_error_total\{protocol="ftp"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4624,7 +4621,7 @@ sub prom_scrape_metric_timeout_idle {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutIdle"} 1+$';
+      $expected = '^proftpd_timeout_total\{protocol="ftp",reason="TimeoutIdle"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4760,7 +4757,7 @@ sub prom_scrape_metric_timeout_login {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutLogin"} 1+$';
+      $expected = '^proftpd_timeout_total\{protocol="ftp",reason="TimeoutLogin"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -4902,7 +4899,7 @@ sub prom_scrape_metric_timeout_notransfer {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutNoTransfer"} 1+$';
+      $expected = '^proftpd_timeout_total\{protocol="ftp",reason="TimeoutNoTransfer"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -5044,7 +5041,7 @@ sub prom_scrape_metric_timeout_session {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutSession"} 1+$';
+      $expected = '^proftpd_timeout_total\{protocol="ftp",reason="TimeoutSession"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -5202,7 +5199,7 @@ sub prom_scrape_metric_timeout_stalled {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutStalled"} 1+$';
+      $expected = '^proftpd_timeout_total\{protocol="ftp",reason="TimeoutStalled"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));

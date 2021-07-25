@@ -200,7 +200,7 @@ sub prom_scrape_metric_handshake_error_tls_ctrl {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_handshake_error_total{connection="ctrl",protocol="ftps"} 1$';
+      $expected = '^proftpd_handshake_error_total\{connection="ctrl",protocol="ftps"\} 1$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -367,7 +367,7 @@ sub prom_scrape_metric_handshake_error_tls_data {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_handshake_error_total{connection="data",protocol="ftps"} 1$';
+      $expected = '^proftpd_handshake_error_total\{connection="data",protocol="ftps"\} 1$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -515,7 +515,7 @@ sub prom_scrape_metric_tls_protocol {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_tls_protocol_total{protocol="ftps",version="TLSv.*?"} 1+$';
+      $expected = '^proftpd_tls_protocol_total\{protocol="ftps",version="TLSv.*?"\} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
