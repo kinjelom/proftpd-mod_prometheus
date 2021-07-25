@@ -333,6 +333,8 @@ sub prom_scrape_metric_handshake_error_tls_data {
 
       $client->quit();
 
+      sleep(1);
+
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
 

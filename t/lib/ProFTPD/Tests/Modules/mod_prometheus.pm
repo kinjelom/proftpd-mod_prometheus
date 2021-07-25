@@ -205,30 +205,6 @@ my $TESTS = {
     test_class => [qw(forking prometheus)],
   },
 
-  # TODO Move mod_tls/mod_sftp tests into mod_prometheus/tls.pm, /sftp.pm
-  # files.
-
-  # TODO: Need multiple tests here, for ctrl/data handshake errors
-  prom_scrape_metric_handshake_error_tls => {
-    order => ++$order,
-    test_class => [qw(forking mod_tls prometheus)],
-  },
-
-  prom_scrape_metric_handshake_error_ssh => {
-    order => ++$order,
-    test_class => [qw(forking mod_sftp prometheus)],
-  },
-
-  prom_scrape_metric_tls_protocol => {
-    order => ++$order,
-    test_class => [qw(forking mod_tls prometheus)],
-  },
-
-  prom_scrape_metric_sftp_protocol => {
-    order => ++$order,
-    test_class => [qw(forking mod_sftp prometheus)],
-  },
-
   prom_config_exporter_addr => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
@@ -1280,7 +1256,7 @@ sub prom_scrape_metric_connection_refused {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_connection_refused_total\{protocol="ftp"\} 1$';
+      $expected = '^proftpd_connection_refused_total\{protocol="ftp"\} \d+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -1411,7 +1387,7 @@ sub prom_scrape_metric_log_message {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_log_message_total\{level="error",protocol="ftp"\} \d+$';
+      $expected = '^proftpd_log_message_total\{level="debug",protocol="ftp"\} \d+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));

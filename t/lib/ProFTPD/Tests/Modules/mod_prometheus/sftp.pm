@@ -169,6 +169,8 @@ sub prom_scrape_metric_handshake_error_ssh2 {
         die("Connected to SSH server unexpectedly");
       }
 
+      sleep(1);
+
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
 
