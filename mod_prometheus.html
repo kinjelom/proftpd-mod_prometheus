@@ -57,6 +57,37 @@ scraping metrics.
 
 <p>
 <hr>
+<h3><a name="PrometheusExporter">PrometheusExporter</a></h3>
+<strong>Syntax:</strong> PrometheusExporter <em>address[:port]</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config</br>
+<strong>Module:</strong> mod_prometheus<br>
+<strong>Compatibility:</strong> 1.3.7a and later
+
+<p>
+The <code>PrometheusExporter</code> directive configures the
+<code>mod_prometheus</code> module to act as an exporter for scraping by
+Prometheus.
+
+<p>
+The <em>address</em> parameter can be an IP address or a DNS name; this
+parameter configures the address/port on which <code>mod_prometheus</code>
+will listen for Prometheus scrape requests.  By default, a port of 9273 is
+assumed; use <em>address:port</em> to specify an alternate port, <i>e.g.</i>:
+<pre>
+  PrometheusExporter 0.0.0.0:19273
+</pre>
+Note that IPv6 addresses should be enclosed in square brackets, as they can
+contain colons as well, <i>e.g.</i>:
+<pre>
+  PrometheusExporter [::]:19273
+</pre>
+
+<p>
+Note that the <code>PrometheusExporter</code> directive is <b>required</b>.
+
+<p>
+<hr>
 <h3><a name="PrometheusLog">PrometheusLog</a></h3>
 <strong>Syntax:</strong> PrometheusLog <em>path|"none"</em><br>
 <strong>Default:</strong> None<br>
@@ -89,8 +120,65 @@ The <code>PrometheusTables</code> directive is used to specify a directory that
 are used for tracking the various statistics reported via Prometheus.
 
 <p>
+Note that the <code>PrometheusTables</code> directive is <b>required</b>.
+
+<p>
 <hr>
 <h2><a name="Usage">Usage</a></h2>
+
+<p>
+<b>Important Security Considerations</b><br>
+Do <b>not</b> configure <code>mod_prometheus</code> to listen on a public
+Internet address.  The information provided via <code>mod_prometheus</code>
+can be used by attackers to gain more information about your running
+<code>proftpd</code>, including being able to determine whether their logins
+fail due to a wrong password (in which case, they know that that user name is
+valid) or not.  It is <b>highly recommended</b> that you configure
+<code>mod_prometheus</code> to only listen on internal/LAN addresses.
+Furthermore, you should employ a firewall rule that <b>rejects</b> any TCP
+connections from the public Internet to your <code>mod_prometheus</code>
+exporter.
+
+<p>
+That said, things are a little different when running in an <i>e.g.</i>
+Kubernetes cluster, with an isolated network.  In these cases, given that
+Kubernetes pods will have dynamic IP addresses, the recommended configuration
+<i>is</i> to listen on the wildcard address, <i>i.e.</i> "0.0.0.0".  This
+works <i>because</i> the Kubernetes cluster network is already isolated from
+the public Internet by default.
+
+<p>
+<b>Prometheus Exporter Process</b><br>
+When <code>proftpd</code> starts up with <code>mod_prometheus</code> enabled,
+the <code>mod_prometheus</code> module will fork a new process that acts as
+the Prometheus exporter, receiving and responding to all scrape requests.
+This exporter listening process automatically switches to the privileges
+configured by the <code>User</code> and <code>Group</code> directives, and will
+also automatically <b>chroot</b> itself to a subdirectory of the
+<code>PrometheusTables</code> directory, after which all root privileges are
+permanently dropped.
+
+<p>
+<b>Example Configuration</b><br>
+The <code>mod_prometheus</code> module uses an HTTP server for listening for
+Prometheus scrape requests.  Thus it does not require any separate
+<code>&lt;VirtualHost&gt;</code> sections, and does not interfere with the
+normal FTP operations.
+
+<p>
+Here is an example configuration for <code>mod_prometheus</code>:
+<pre>
+  &lt;IfModule mod_prometheus.c&gt;
+    PrometheusEngine on
+    PrometheusLog /etc/proftpd/prometheus/prometheus.log
+
+    # Configure the exporter to listen on the default port
+    PrometheusExporter 0.0.0.0
+
+    # Configure the directory that mod_prometheus will use for its database files
+    PrometheusTables /var/proftpd/prometheus
+  &lt;/IfModule&gt;
+</pre>
 
 <p>
 <b>Logging</b><br>
@@ -101,6 +189,11 @@ debugging purposes, the module also uses <a href="http://www.proftpd.org/docs/ho
 <ul>
   <li>prometheus
   <li>prometheus.db
+  <li>prometheus.http
+  <li>prometheus.metric
+  <li>prometheus.metric.db
+  <li>prometheus.registry
+  <li>prometheus.text
 </ul>
 
 <p>
@@ -146,6 +239,10 @@ building <code>mod_prometheus</code>.
 It is <b>highly recommended</b> that SQLite 3.8.5 or later be used.  Problems
 have been reported with <code>mod_prometheus</code> when SQLite 3.6.20 is used;
 these problems disappeared once SQLite was upgraded to a newer version.
+
+<b>Note</b>: <code>mod_prometheus</code> uses the
+<a href="https://www.gnu.org/software/libmicrohttpd/"><code>libmicrohttpd</code></a> library; thus the <code>libmicrohttpd</code> development library/headers
+<b>must</b> be installed for building <code>mod_prometheus</code>.
 
 <p>
 <hr>
