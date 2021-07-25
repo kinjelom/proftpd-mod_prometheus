@@ -38,7 +38,7 @@ static const char *current_schema = NULL;
 
 static const char *trace_channel = "prometheus.db";
 
-#define PROM_DB_SQLITE_MAX_RETRY_COUNT		4
+#define PROM_DB_SQLITE_MAX_RETRY_COUNT		8
 #define PROM_DB_SQLITE_MAX_RETRY_DELAY_MS	250
 
 #define PROM_DB_SQLITE_TRACE_LEVEL		17
