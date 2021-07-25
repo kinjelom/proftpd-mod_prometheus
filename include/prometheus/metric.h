@@ -57,6 +57,10 @@ int prom_metric_decr(pool *p, const struct prom_metric *metric, uint32_t decr,
 int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t incr,
   pr_table_t *labels);
 
+/* Increment the specified metric type by the given `incr`. */
+int prom_metric_incr_type(pool *p, const struct prom_metric *metric,
+  uint32_t incr, pr_table_t *labels, int metric_type);
+
 /* Observe the specified metric by the given `val`; apply to any
  * histogram records associated with this metric.
  */

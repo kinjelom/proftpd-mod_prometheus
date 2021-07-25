@@ -334,15 +334,72 @@ int prom_metric_decr(pool *p, const struct prom_metric *metric, uint32_t val,
   return res;
 }
 
-int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
-    pr_table_t *labels) {
+int prom_metric_incr_type(pool *p, const struct prom_metric *metric,
+    uint32_t val, pr_table_t *labels, int metric_type) {
   int res = 0, xerrno;
   pool *tmp_pool;
   struct prom_text *text;
-  const char *label_str;
+  const char *metric_name, *label_str;
+  int64_t metric_id;
 
   if (p == NULL ||
       metric == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Increment operation only supported for counters/gauges. */
+  switch (metric_type) {
+    case PROM_METRIC_TYPE_COUNTER:
+      if (metric->counter_name == NULL) {
+        errno = EPERM;
+        return -1;
+      }
+      metric_name = metric->counter_name;
+      metric_id = metric->counter_id;
+      break;
+
+    case PROM_METRIC_TYPE_GAUGE:
+      if (metric->gauge_name == NULL) {
+        errno = EPERM;
+        return -1;
+      }
+      metric_name = metric->gauge_name;
+      metric_id = metric->gauge_id;
+      break;
+
+    case PROM_METRIC_TYPE_HISTOGRAM:
+      errno = EPERM;
+      return -1;
+
+    default:
+      errno = EINVAL;
+      return -1;
+  }
+
+  tmp_pool = make_sub_pool(p);
+  text = prom_text_create(tmp_pool);
+  label_str = prom_text_from_labels(tmp_pool, text, labels);
+
+  res = prom_metric_db_sample_incr(p, metric->dbh, metric_id, (double) val,
+    label_str);
+  xerrno = errno;
+
+  if (res < 0) {
+   pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
+      metric_name, (unsigned long) val, strerror(xerrno));
+  }
+
+  prom_text_destroy(text);
+  destroy_pool(tmp_pool);
+  errno = xerrno;
+  return res;
+}
+
+int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
+    pr_table_t *labels) {
+
+  if (metric == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -354,36 +411,26 @@ int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
     return -1;
   }
 
-  tmp_pool = make_sub_pool(p);
-  text = prom_text_create(tmp_pool);
-  label_str = prom_text_from_labels(tmp_pool, text, labels);
-
   if (metric->counter_name != NULL) {
-    res = prom_metric_db_sample_incr(p, metric->dbh, metric->counter_id,
-      (double) val, label_str);
-    xerrno = errno;
+    int res;
 
+    res = prom_metric_incr_type(p, metric, val, labels,
+      PROM_METRIC_TYPE_COUNTER);
     if (res < 0) {
-      pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
-        metric->counter_name, (unsigned long) val, strerror(xerrno));
+      return -1;
     }
   }
 
   if (metric->gauge_name != NULL) {
-    res = prom_metric_db_sample_incr(p, metric->dbh, metric->gauge_id,
-      (double) val, label_str);
-    xerrno = errno;
+    int res;
 
+    res = prom_metric_incr_type(p, metric, val, labels, PROM_METRIC_TYPE_GAUGE);
     if (res < 0) {
-      pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
-        metric->gauge_name, (unsigned long) val, strerror(xerrno));
+      return -1;
     }
   }
 
-  prom_text_destroy(text);
-  destroy_pool(tmp_pool);
-  errno = xerrno;
-  return res;
+  return 0;
 }
 
 int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,

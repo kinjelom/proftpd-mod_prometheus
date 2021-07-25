@@ -490,6 +490,102 @@ START_TEST (metric_decr_test) {
 }
 END_TEST
 
+START_TEST (metric_incr_type_test) {
+  int res;
+  const char *name;
+  struct prom_dbh *dbh;
+  struct prom_metric *metric;
+  uint32_t incr_val = 66;
+  pr_table_t *labels;
+  const array_header *results;
+
+  (void) tests_rmpath(p, test_dir);
+  (void) tests_mkpath(p, test_dir);
+
+  mark_point();
+  res = prom_metric_incr_type(NULL, NULL, 0, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_incr_type(p, NULL, 0, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null metric");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  dbh = prom_metric_init(p, test_dir);
+  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+
+  mark_point();
+  name = "test";
+  metric = prom_metric_create(p, name, dbh);
+  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_incr_type(p, metric, incr_val, NULL, 0);
+  fail_unless(res < 0, "Failed to handle unknown metric type");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_incr_type(p, metric, incr_val, NULL,
+    PROM_METRIC_TYPE_COUNTER);
+  fail_unless(res < 0, "Failed to handle counter-less metric");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_incr_type(p, metric, incr_val, NULL,
+    PROM_METRIC_TYPE_GAUGE);
+  fail_unless(res < 0, "Failed to handle gauge-less metric");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_metric_add_counter(metric, "total", "testing");
+  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_incr_type(p, metric, incr_val, NULL,
+    PROM_METRIC_TYPE_COUNTER);
+  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+
+  mark_point();
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
+    strerror(errno));
+  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+    results->nelts);
+
+  /* Now, provide labels. */
+  labels = pr_table_nalloc(p, 0, 2);
+  (void) pr_table_add_dup(labels, "protocol", "ftp", 0);
+  (void) pr_table_add_dup(labels, "foo", "BAR", 0);
+
+  mark_point();
+  res = prom_metric_incr_type(p, metric, incr_val, labels,
+    PROM_METRIC_TYPE_COUNTER);
+  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+
+  mark_point();
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
+    strerror(errno));
+  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+    results->nelts);
+
+  mark_point();
+  res = prom_metric_destroy(p, metric);
+  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+
+  res = prom_metric_free(p, dbh);
+  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  (void) tests_rmpath(p, test_dir);
+}
+END_TEST
+
 START_TEST (metric_incr_test) {
   int res;
   const char *name;
@@ -910,6 +1006,7 @@ Suite *tests_get_metric_suite(void) {
 
   tcase_add_test(testcase, metric_get_test);
   tcase_add_test(testcase, metric_decr_test);
+  tcase_add_test(testcase, metric_incr_type_test);
   tcase_add_test(testcase, metric_incr_test);
   tcase_add_test(testcase, metric_incr_counter_gauge_test);
   tcase_add_test(testcase, metric_observe_test);

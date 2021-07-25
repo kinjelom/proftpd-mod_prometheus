@@ -52,6 +52,9 @@ static struct prom_registry *prometheus_registry = NULL;
 static struct prom_http *prometheus_exporter_http = NULL;
 static pid_t prometheus_exporter_pid = 0;
 
+static int prometheus_saw_user_cmd = FALSE;
+static int prometheus_saw_pass_cmd = FALSE;
+
 /* Number of seconds to wait for the exporter process to stop before
  * we terminate it with extreme prejudice.
  *
@@ -482,7 +485,7 @@ static pr_table_t *prom_get_labels(pool *p) {
   return labels;
 }
 
-static const struct prom_metric *prom_metric_with_labels(
+static const struct prom_metric *prom_metric_with_labels(pool *p,
     const char *metric_name, pr_table_t *labels, va_list ap) {
   char *key;
   const struct prom_metric *metric;
@@ -501,7 +504,14 @@ static const struct prom_metric *prom_metric_with_labels(
     pr_signals_handle();
 
     val = va_arg(ap, char *);
-    (void) pr_table_add_dup(labels, key, val, 0);
+
+    /* Any labels provided by the caller take precedence. */
+    if (pr_table_exists(labels, key) > 0) {
+      (void) pr_table_set(labels, key, pstrdup(p, val), 0);
+
+    } else {
+      (void) pr_table_add_dup(labels, key, val, 0);
+    }
 
     key = va_arg(ap, char *);
   }
@@ -527,7 +537,7 @@ static void prom_event_decr(const char *metric_name, uint32_t decr, ...) {
   labels = prom_get_labels(tmp_pool);
 
   va_start(ap, decr);
-  metric = prom_metric_with_labels(metric_name, labels, ap);
+  metric = prom_metric_with_labels(tmp_pool, metric_name, labels, ap);
   va_end(ap);
 
   if (metric == NULL) {
@@ -561,7 +571,7 @@ static void prom_event_incr(const char *metric_name, uint32_t incr, ...) {
   labels = prom_get_labels(tmp_pool);
 
   va_start(ap, incr);
-  metric = prom_metric_with_labels(metric_name, labels, ap);
+  metric = prom_metric_with_labels(tmp_pool, metric_name, labels, ap);
   va_end(ap);
 
   if (metric == NULL) {
@@ -595,7 +605,7 @@ static void prom_event_observe(const char *metric_name, double observed, ...) {
   labels = prom_get_labels(tmp_pool);
 
   va_start(ap, observed);
-  metric = prom_metric_with_labels(metric_name, labels, ap);
+  metric = prom_metric_with_labels(tmp_pool, metric_name, labels, ap);
   va_end(ap);
 
   if (metric == NULL) {
@@ -851,7 +861,7 @@ MODRET set_prometheustables(cmd_rec *cmd) {
 /* Command handlers
  */
 
-static void prom_cmd_adj(cmd_rec *cmd, const char *metric_name, int64_t val,
+static void prom_cmd_decr(cmd_rec *cmd, const char *metric_name,
     pr_table_t *labels) {
   const struct prom_metric *metric;
 
@@ -861,12 +871,7 @@ static void prom_cmd_adj(cmd_rec *cmd, const char *metric_name, int64_t val,
       labels = prom_get_labels(cmd->tmp_pool);
     }
 
-    if (val >= 0) {
-      prom_metric_incr(cmd->tmp_pool, metric, 1, labels);
-
-    } else {
-      prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
-    }
+    prom_metric_decr(cmd->tmp_pool, metric, 1, labels);
 
   } else {
     pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
@@ -874,26 +879,21 @@ static void prom_cmd_adj(cmd_rec *cmd, const char *metric_name, int64_t val,
   }
 }
 
-static void prom_cmd_incr(cmd_rec *cmd, const char *metric_name,
-    pr_table_t *labels) {
-  prom_cmd_adj(cmd, metric_name, 1, labels);
-}
+static void prom_cmd_incr_type(cmd_rec *cmd, const char *metric_name,
+    pr_table_t *labels, int metric_type) {
+  const struct prom_metric *metric;
 
-static void prom_cmd_decr(cmd_rec *cmd, const char *metric_name,
-    int successful, pr_table_t *labels) {
+  metric = prom_registry_get_metric(prometheus_registry, metric_name);
+  if (metric != NULL) {
+    if (labels == NULL) {
+      labels = prom_get_labels(cmd->tmp_pool);
+    }
 
-  if (labels == NULL) {
-    labels = prom_get_labels(cmd->tmp_pool);
-  }
+    prom_metric_incr_type(cmd->tmp_pool, metric, 1, labels, metric_type);
 
-  prom_cmd_adj(cmd, metric_name, -1, labels);
-
-  if (successful == FALSE) {
-    const char *error_name;
-
-    /* Also increment the corresponding error counter. */
-    error_name = pstrcat(cmd->tmp_pool, metric_name, "_error", NULL);
-    prom_cmd_adj(cmd, error_name, 1, labels);
+  } else {
+    pr_trace_msg(trace_channel, 19, "%s: unknown '%s' metric requested",
+      (char *) cmd->argv[0], metric_name);
   }
 }
 
@@ -920,16 +920,20 @@ MODRET prom_pre_list(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_incr(cmd, "directory_list", NULL);
+  prom_cmd_incr_type(cmd, "directory_list", NULL, PROM_METRIC_TYPE_GAUGE);
   return PR_DECLINED(cmd);
 }
 
 MODRET prom_log_list(cmd_rec *cmd) {
+  const char *metric_name;
+
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_decr(cmd, "directory_list", TRUE, NULL);
+  metric_name = "directory_list";
+  prom_cmd_incr_type(cmd, metric_name, NULL, PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, metric_name, NULL);
   return PR_DECLINED(cmd);
 }
 
@@ -938,7 +942,9 @@ MODRET prom_err_list(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_decr(cmd, "directory_list", FALSE, NULL);
+  prom_cmd_incr_type(cmd, "directory_list_error", NULL,
+    PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, "directory_list", NULL);
   return PR_DECLINED(cmd);
 }
 
@@ -947,7 +953,32 @@ MODRET prom_pre_user(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_incr(cmd, "login", NULL);
+  /* Logins begin at the first USER command seen; subsequent USER commands
+   * are ignored, for purposes of the gauge.
+   *
+   * Logins end either at successful login, or end of connection.
+   */
+  if (prometheus_saw_user_cmd == FALSE) {
+    prom_cmd_incr_type(cmd, "login", NULL, PROM_METRIC_TYPE_GAUGE);
+    prometheus_saw_user_cmd = TRUE;
+    prometheus_saw_pass_cmd = FALSE;
+  }
+
+  return PR_DECLINED(cmd);
+}
+
+MODRET prom_pre_pass(cmd_rec *cmd) {
+  if (prometheus_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
+  if (prometheus_saw_user_cmd == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
+  /* Used for tracking "incomplete" logins. */
+  prometheus_saw_pass_cmd = TRUE;
+
   return PR_DECLINED(cmd);
 }
 
@@ -960,6 +991,10 @@ MODRET prom_log_pass(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
+  if (prometheus_saw_user_cmd == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
   /* Easiest way for us to check for anonymous logins is here; the <Anonymous>
    * auth flow does not use the "mod_auth.authentication-code" event.
    */
@@ -969,7 +1004,9 @@ MODRET prom_log_pass(cmd_rec *cmd) {
 
   metric_name = "login";
   labels = prom_get_labels(cmd->tmp_pool);
-  prom_cmd_decr(cmd, "login", TRUE, labels);
+
+  prom_cmd_incr_type(cmd, metric_name, labels, PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, metric_name, labels);
 
   now = time(NULL);
   prom_cmd_observe(cmd, metric_name,
@@ -982,7 +1019,15 @@ MODRET prom_err_login(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_decr(cmd, "login", FALSE, NULL);
+  prom_cmd_incr_type(cmd, "login_error", NULL, PROM_METRIC_TYPE_COUNTER);
+
+  /* Note that we never decrement the "login" gauge here.  Why not?  A
+   * failed USER or PASS command could happen for multiple reasons (bad
+   * sequence, wrong password that will be followed by a correct one, etc).
+   * Thus the "login" gauge should only be decremented by a successful login,
+   * or end of connection.
+   */
+
   return PR_DECLINED(cmd);
 }
 
@@ -991,7 +1036,7 @@ MODRET prom_pre_retr(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_incr(cmd, "file_download", NULL);
+  prom_cmd_incr_type(cmd, "file_download", NULL, PROM_METRIC_TYPE_GAUGE);
   return PR_DECLINED(cmd);
 }
 
@@ -1005,7 +1050,8 @@ MODRET prom_log_retr(cmd_rec *cmd) {
 
   metric_name = "file_download";
   labels = prom_get_labels(cmd->tmp_pool);
-  prom_cmd_decr(cmd, metric_name, TRUE, labels);
+  prom_cmd_incr_type(cmd, metric_name, labels, PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, metric_name, labels);
   prom_cmd_observe(cmd, metric_name, session.xfer.total_bytes, labels);
   return PR_DECLINED(cmd);
 }
@@ -1015,7 +1061,9 @@ MODRET prom_err_retr(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_decr(cmd, "file_download", FALSE, NULL);
+  prom_cmd_incr_type(cmd, "file_download_error", NULL,
+    PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, "file_download", NULL);
   return PR_DECLINED(cmd);
 }
 
@@ -1024,7 +1072,7 @@ MODRET prom_pre_stor(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_incr(cmd, "file_upload", NULL);
+  prom_cmd_incr_type(cmd, "file_upload", NULL, PROM_METRIC_TYPE_GAUGE);
   return PR_DECLINED(cmd);
 }
 
@@ -1038,7 +1086,8 @@ MODRET prom_log_stor(cmd_rec *cmd) {
 
   metric_name = "file_upload";
   labels = prom_get_labels(cmd->tmp_pool);
-  prom_cmd_decr(cmd, metric_name, TRUE, labels);
+  prom_cmd_incr_type(cmd, metric_name, labels, PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, metric_name, labels);
   prom_cmd_observe(cmd, metric_name, session.xfer.total_bytes, labels);
   return PR_DECLINED(cmd);
 }
@@ -1048,7 +1097,9 @@ MODRET prom_err_stor(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
   }
 
-  prom_cmd_decr(cmd, "file_upload", FALSE, NULL);
+  prom_cmd_incr_type(cmd, "file_upload_error", NULL,
+    PROM_METRIC_TYPE_COUNTER);
+  prom_cmd_decr(cmd, "file_upload", NULL);
   return PR_DECLINED(cmd);
 }
 
@@ -1195,9 +1246,16 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
     default: {
       time_t now;
 
-/* XXX What if we begin login, but didn't finish?  Should we decrement "login"
- * here?
- */
+      if (prometheus_saw_user_cmd == TRUE &&
+          session.user == NULL) {
+        /* Login was started, but not completed. */
+        prom_event_decr("login", 1, NULL);
+
+        if (prometheus_saw_pass_cmd == FALSE) {
+          prom_event_incr("auth_error", 1, "reason", "incomplete", NULL);
+        }
+      }
+
       prom_event_decr("connection", 1, NULL);
 
       now = time(NULL);
@@ -1341,7 +1399,8 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
    */
 
   metric = prom_metric_create(prometheus_pool, "auth", dbh);
-  prom_metric_add_counter(metric, "total", "Number of authentications");
+  prom_metric_add_counter(metric, "total",
+    "Number of successful authentications");
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
     pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
@@ -1369,7 +1428,8 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "directory_list", dbh);
-  prom_metric_add_counter(metric, "total", "Number of directory listings");
+  prom_metric_add_counter(metric, "total",
+    "Number of succesful directory listings");
   prom_metric_add_gauge(metric, "count", "Current count of directory listings");
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
@@ -1387,7 +1447,8 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "file_download", dbh);
-  prom_metric_add_counter(metric, "total", "Number of file downloads");
+  prom_metric_add_counter(metric, "total",
+    "Number of successful file downloads");
   prom_metric_add_gauge(metric, "count", "Current count of file downloads");
   prom_metric_add_histogram(metric, "bytes",
     "Amount of data downloaded in bytes");
@@ -1406,7 +1467,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "file_upload", dbh);
-  prom_metric_add_counter(metric, "total", "Number of file uploads");
+  prom_metric_add_counter(metric, "total", "Number of successful file uploads");
   prom_metric_add_gauge(metric, "count", "Current count of file uploads");
   prom_metric_add_histogram(metric, "bytes",
     "Amount of data uploaded in bytes");
@@ -1425,7 +1486,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "login", dbh);
-  prom_metric_add_counter(metric, "total", "Number of logins");
+  prom_metric_add_counter(metric, "total", "Number of successful logins");
   prom_metric_add_gauge(metric, "count", "Current count of logins");
   prom_metric_add_histogram(metric, "delay_seconds",
     "Delay before login in seconds");
@@ -1461,7 +1522,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "sftp_protocol", dbh);
-  prom_metric_add_counter(metric, NULL,
+  prom_metric_add_counter(metric, "total",
     "Number of SFTP sessions by protocol version");
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
@@ -1470,7 +1531,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   }
 
   metric = prom_metric_create(prometheus_pool, "tls_protocol", dbh);
-  prom_metric_add_counter(metric, NULL,
+  prom_metric_add_counter(metric, "total",
     "Number of TLS sessions by protocol version");
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
@@ -1771,7 +1832,12 @@ static void prom_tls_ctrl_handshake_err_ev(const void *event_data,
     return;
   }
 
-  prom_event_incr("handshake_error", 1, "connection", "ctrl", NULL);
+  /* Note that we explicitly set the "protocol" label here to "ftps".
+   * Otherwise, it would show up as "ftp", since the TLS handshake did
+   * not actually succeed, and that "ftp" label would be surprising.
+   */
+  prom_event_incr("handshake_error", 1, "connection", "ctrl",
+    "protocol", "ftps", NULL);
 }
 
 static void prom_tls_data_handshake_err_ev(const void *event_data,
@@ -2043,12 +2109,17 @@ static cmdtable prometheus_cmdtab[] = {
   { LOG_CMD,		C_MLSD,	G_NONE,	prom_log_list,	FALSE,	FALSE },
   { LOG_CMD_ERR,	C_MLSD,	G_NONE,	prom_err_list,	FALSE,	FALSE },
 
+  { PRE_CMD,		C_MLST,	G_NONE,	prom_pre_list,	FALSE,	FALSE },
+  { LOG_CMD,		C_MLST,	G_NONE,	prom_log_list,	FALSE,	FALSE },
+  { LOG_CMD_ERR,	C_MLST,	G_NONE,	prom_err_list,	FALSE,	FALSE },
+
   { PRE_CMD,		C_NLST,	G_NONE,	prom_pre_list,	FALSE,	FALSE },
   { LOG_CMD,		C_NLST,	G_NONE,	prom_log_list,	FALSE,	FALSE },
   { LOG_CMD_ERR,	C_NLST,	G_NONE,	prom_err_list,	FALSE,	FALSE },
 
   { PRE_CMD,		C_USER, G_NONE, prom_pre_user,	FALSE,	FALSE },
   { LOG_CMD_ERR,	C_USER, G_NONE, prom_err_login,	FALSE,	FALSE },
+  { PRE_CMD,		C_PASS, G_NONE, prom_pre_pass,	FALSE,	FALSE },
   { LOG_CMD,		C_PASS,	G_NONE,	prom_log_pass,	FALSE,	FALSE },
   { LOG_CMD_ERR,	C_PASS,	G_NONE,	prom_err_login,	FALSE,	FALSE },
 

@@ -80,22 +80,17 @@ my $TESTS = {
     test_class => [qw(forking prometheus rootprivs)],
   },
 
-  prom_scrape_metric_auth_unknown_user => {
+  prom_scrape_metric_auth_error_unknown_user => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
   },
 
-  prom_scrape_metric_auth_bad_password => {
+  prom_scrape_metric_auth_error_bad_password => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
   },
 
-  prom_scrape_metric_auth_error => {
-    order => ++$order,
-    test_class => [qw(forking prometheus)],
-  },
-
-  prom_scrape_metric_connection => {
+  prom_scrape_metric_auth_error_incomplete => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
   },
@@ -130,32 +125,88 @@ my $TESTS = {
     test_class => [qw(forking prometheus)],
   },
 
-  # Pre-login
-  # Post-login
-  # Multiple login attempts: n USER/PASS.  1 USER, n PASS.
-  # Truncated login: USER, QUIT.
-  #
-  # Make sure gauge decrements for these.
-  prom_scrape_metric_login => {
+  prom_scrape_metric_login_succeeded => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
   },
 
-  # Failed logins: unknown USER, bad password
-  # Blocked logins: <Limit LOGIN>+DenyUser
-  prom_scrape_metric_login_error => {
+  prom_scrape_metric_login_multiple_times => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_user_quit => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_user_multiple_times => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_pass_multiple_times => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_in_progress => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_error_bad_user => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_error_bad_password => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_error_user_bad_pass_good_pass => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_error_pass_multiple_times => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_login_error_denied_acl => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_timeout_idle => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_timeout_login => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_timeout_notransfer => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_timeout_session => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
+  prom_scrape_metric_timeout_stalled => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
   },
 
   # TODO Move mod_tls/mod_sftp tests into mod_prometheus/tls.pm, /sftp.pm
   # files.
-
-  # TODO: Need multiple tests here, for the timeout-specific labels
-  prom_scrape_metric_timeout => {
-    order => ++$order,
-    test_class => [qw(forking prometheus)],
-  },
 
   # TODO: Need multiple tests here, for ctrl/data handshake errors
   prom_scrape_metric_handshake_error_tls => {
@@ -218,10 +269,8 @@ sub list_tests {
 
 #  return testsuite_get_runnable_tests($TESTS);
   return qw(
-    prom_scrape_metric_auth_anon_ok
+    prom_scrape_metric_login_error_denied_acl
   );
-#    prom_scrape_metric_auth_unknown_user
-#    prom_scrape_metric_auth_bad_password
 }
 
 # Support routines
@@ -894,12 +943,6 @@ sub prom_scrape_metric_build_info {
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
 
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
-
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
 
@@ -1033,12 +1076,6 @@ sub prom_scrape_metric_startup_time {
       my $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
-
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
 
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
@@ -1177,12 +1214,6 @@ sub prom_scrape_metric_connection {
       my $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
-
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
 
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
@@ -1348,12 +1379,6 @@ sub prom_scrape_metric_connection_refused {
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
 
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
-
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
 
@@ -1491,12 +1516,6 @@ sub prom_scrape_metric_log_message {
       my $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
-
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
 
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
@@ -1645,12 +1664,6 @@ sub prom_scrape_metric_auth_ok {
       my $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
-
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
 
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
@@ -1804,12 +1817,6 @@ sub prom_scrape_metric_auth_anon_ok {
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
 
-      my $headers = $resp->headers;
-      my $content_type = $headers->header('Content-Type');
-      $expected = 'text/plain';
-      $self->assert($expected eq $content_type,
-        test_msg("Expected Content-Type '$expected', got '$content_type'"));
-
       my $content = $resp->content;
       my $lines = [split(/\n/, $content)];
 
@@ -1824,6 +1831,3824 @@ sub prom_scrape_metric_auth_anon_ok {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       $expected = '^proftpd_auth_total{method="anonymous",protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_auth_error_unknown_user {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'auth:20 prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->login('foo', 'bar') };
+      unless ($@) {
+        die("Login succeeded unexpectedly");
+      }
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_auth_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_auth_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="unknown user"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_auth_error_bad_password {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'auth:20 prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->login($setup->{user}, 'bar') };
+      unless ($@) {
+        die("Login succeeded unexpectedly");
+      }
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_auth_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_auth_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="bad password"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_auth_error_incomplete {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'auth:20 prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->user('foo');
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_auth_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_auth_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_auth_error_total{protocol="ftp",reason="incomplete"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_directory_list {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      # LIST
+      my $conn = $client->list_raw();
+      unless ($conn) {
+        die("LIST failed: " . $client->response_code() . " " .
+          $client->response_msg());
+      }
+
+      my $buf;
+      $conn->read($buf, 8192, 30);
+      eval { $conn->close() };
+
+      # NLST
+      $buf = '';
+      $conn = $client->nlst_raw();
+      unless ($conn) {
+        die("NLST failed: " . $client->response_code() . " " .
+          $client->response_msg());
+      }
+
+      $conn->read($buf, 8192, 30);
+      eval { $conn->close() };
+
+      # MLSD
+      $buf = '';
+      $conn = $client->mlsd_raw();
+      unless ($conn) {
+        die("MLSD failed: " . $client->response_code() . " " .
+          $client->response_msg());
+      }
+
+      $conn->read($buf, 8192, 30);
+      eval { $conn->close() };
+
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_directory_list_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_directory_list_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_directory_list_total{protocol="ftp"} 3+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_directory_list_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_directory_list_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_directory_list_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_directory_list_error {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      # LIST always succeeds, unfortunately.
+
+      # NLST
+      my $conn = $client->nlst_raw('/quxx/quzz');
+      if ($conn) {
+        die("NLST succeeded unexpectedly");
+      }
+
+      # MLSD
+      $conn = $client->mlsd_raw('/alef/bet/vet');
+      if ($conn) {
+        die("MLSD succeeded unexpectedly");
+      }
+
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_directory_list_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_directory_list_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_directory_list_error_total{protocol="ftp"} 2+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_file_download {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $test_file = File::Spec->rel2abs("$tmpdir/test.dat");
+  if (open(my $fh, "> $test_file")) {
+    print $fh "AbCd" x 8192;
+    unless (close($fh)) {
+      die("Can't write $test_file: $!");
+    }
+
+  } else {
+    die("Can't open $test_file: $!");
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      my ($resp_code, $resp_msg) = $client->retr($test_file);
+      $self->assert_transfer_ok($resp_code, $resp_msg);
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_file_download_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_download_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_file_download_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_download_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_file_download_error {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $test_file = File::Spec->rel2abs("$tmpdir/test.dat");
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+      eval { $client->retr($test_file) };
+      unless ($@) {
+        die("RETR $test_file succeeded unexpectedly");
+      }
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_file_download_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_download_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_file_upload {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $test_file = File::Spec->rel2abs("$tmpdir/test.dat");
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      my $conn = $client->stor_raw($test_file);
+      unless ($conn) {
+        die("Failed to STOR: " . $client->response_code() . " " .
+          $client->response_msg());
+      }
+
+      my $buf = "Hello World!\n";
+      $conn->write($buf, length($buf), 25);
+      eval { $conn->close() };
+
+      my $resp_code = $client->response_code();
+      my $resp_msg = $client->response_msg();
+      $self->assert_transfer_ok($resp_code, $resp_msg);
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_file_upload_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_upload_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_file_upload_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_upload_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_file_upload_error {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $test_file = File::Spec->rel2abs("$tmpdir/sub.d/test.dat");
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      my $conn = $client->stor_raw($test_file);
+      if ($conn) {
+        die("STOR $test_file succeeded unexpectedly");
+      }
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_file_upload_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_upload_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_succeeded {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_multiple_times {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+      eval { $client->login($setup->{user}, $setup->{passwd}) };
+      eval { $client->login($setup->{user}, $setup->{passwd}) };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_user_quit {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->user($setup->{user});
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_user_multiple_times {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->user($setup->{user});
+      eval { $client->user($setup->{user}) };
+      eval { $client->user($setup->{user}) };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_pass_multiple_times {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->pass('foo') };
+      eval { $client->pass('foo') };
+      eval { $client->pass('foo') };
+      $client->user($setup->{user});
+      eval { $client->pass('foo') };
+      eval { $client->pass('foo') };
+      $client->user($setup->{user});
+      $client->pass($setup->{passwd});
+      eval { $client->pass('foo') };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_in_progress {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->user($setup->{user});
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      # Counter
+      $expected = '^# HELP proftpd_login_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_total 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Gauge
+      $expected = '^# HELP proftpd_login_count .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_count gauge$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_count{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $client->quit();
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_error_bad_user {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->login('foo', 'bar') };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_login_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_error_bad_password {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->login($setup->{user}, 'bar') };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_login_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_error_user_bad_pass_good_pass {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->user($setup->{user});
+      eval { $client->pass('foo') };
+      $client->user($setup->{user});
+      $client->pass($setup->{passwd});
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_login_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_error_pass_multiple_times {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->pass('foo') };
+      eval { $client->pass('foo') };
+      eval { $client->pass('foo') };
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_login_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_error_total{protocol="ftp"} 3+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_login_error_denied_acl {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+
+    Limit => {
+      LOGIN => {
+        DenyUser => $setup->{user},
+      },
+    }
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      eval { $client->login($setup->{user}, $setup->{passwd}) };
+      unless ($@) {
+        die("Login succeeded unexpectedly");
+      }
+      $client->quit();
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_login_error_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_error_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_error_total{protocol="ftp"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_timeout_idle {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $timeout_idle = 3;
+  my $timeout_delay = $timeout_idle + 2;
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutIdle => $timeout_idle,
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+      $client->noop();
+
+      # Wait for more than the TimeoutIdle period
+      sleep($timeout_delay);
+
+      eval { $client->noop() };
+      unless ($@) {
+        die("NOOP succeeded unexpectedly");
+      }
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_timeout_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_timeout_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutIdle"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_timeout_login {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $timeout_login = 3;
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutLogin => $timeout_login,
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+
+      # Wait for 2s more than the TimeoutLogin period
+      sleep($timeout_login + 2);
+
+      eval { $client->user($setup->{user}) };
+      unless ($@) {
+        die("USER succeeded unexpectedly");
+      }
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_timeout_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_timeout_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutLogin"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_timeout_notransfer {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $timeout_notransfer = 2;
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutNoTransfer => $timeout_notransfer,
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      # Wait for 2s more than the TimeoutNoTransfer period
+      for (my $i = 0; $i < $timeout_notransfer; $i++) {
+        sleep(1);
+        eval { $client->noop() };
+      }
+
+      sleep(2);
+
+      eval { $client->noop() };
+      unless ($@) {
+        die("NOOP succeeded unexpectedly");
+      }
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_timeout_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_timeout_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutNoTransfer"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_timeout_session {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $timeout_session = 3;
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutSession => $timeout_session,
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      # Wait for 2s more than the TimeoutSession period
+      for (my $i = 0; $i < $timeout_session; $i++) {
+        sleep(1);
+        eval { $client->noop() };
+      }
+
+      sleep(2);
+
+      eval { $client->noop() };
+      unless ($@) {
+        die("NOOP succeeded unexpectedly");
+      }
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_timeout_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_timeout_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutSession"} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metric_timeout_stalled {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  # Make sure that, if we're running as root, that the home directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $table_dir)) {
+      die("Can't set perms on $table_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
+      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $test_file = File::Spec->rel2abs("$tmpdir/test.dat");
+  if (open(my $fh, "> $test_file")) {
+    print $fh "AbCd" x 8192000;
+    unless (close($fh)) {
+      die("Can't write $test_file: $!");
+    }
+
+  } else {
+    die("Can't open $test_file: $!");
+  }
+
+  my $timeout_stalled = 2;
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutStalled => $timeout_stalled,
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
+      $client->login($setup->{user}, $setup->{passwd});
+
+      my $conn = $client->retr_raw($test_file);
+      unless ($conn) {
+        die("RETR failed: " . $client->response_code() . " " .
+          $client->response_msg());
+      }
+
+      # Wait for 2s more than the stalled period
+      sleep($timeout_stalled + 2);
+
+      my $buf = '';
+      $conn->read($buf, 8192, 30);
+      eval { $conn->close() };
+
+      eval { $client->noop() };
+      unless ($@) {
+        die("NOOP succeeded unexpectedly");
+      }
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $content = $resp->content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_timeout_total .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_timeout_total counter$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_timeout_total{protocol="ftp",reason="TimeoutStalled"} 1+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
