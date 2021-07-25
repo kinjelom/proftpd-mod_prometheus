@@ -269,11 +269,34 @@ sub list_tests {
 
 #  return testsuite_get_runnable_tests($TESTS);
   return qw(
-    prom_scrape_metric_login_error_denied_acl
+    prom_start_existing_dirs
+    prom_scrape_unacceptable_method
+    prom_scrape_bad_uri
+    prom_scrape_base_uri
+    prom_scrape_metrics_uri
   );
 }
 
 # Support routines
+
+sub create_test_dir {
+  my $setup = shift;
+  my $sub_dir = shift;
+
+  mkpath($sub_dir);
+
+  # Make sure that, if we're running as root, that the sub directory has
+  # permissions/privs set for the account we create
+  if ($< == 0) {
+    unless (chmod(0755, $sub_dir)) {
+      die("Can't set perms on $sub_dir to 0755: $!");
+    }
+
+    unless (chown($setup->{uid}, $setup->{gid}, $sub_dir)) {
+      die("Can't set owner of $sub_dir to $setup->{uid}/$setup->{gid}: $!");
+    }
+  }
+}
 
 sub saw_expected_content {
   my $lines = shift;
@@ -1238,7 +1261,7 @@ sub prom_scrape_metric_connection {
       # Gauge
 
       $expected = '^# HELP proftpd_connection_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -1769,7 +1792,8 @@ sub prom_scrape_metric_auth_anon_ok {
     },
   };
 
-  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+  my $port;
+  ($port, $config_user, $config_group) = config_write($setup->{config_file},
     $config);
 
   # Open pipes, for use between the parent and child processes.  Specifically,
@@ -2430,7 +2454,7 @@ sub prom_scrape_metric_directory_list {
 
       # Gauge
       $expected = '^# HELP proftpd_directory_list_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -2723,12 +2747,12 @@ sub prom_scrape_metric_file_download {
       }
 
       my $expected = 200;
-      my $resp_code = $resp->code;
+      $resp_code = $resp->code;
       $self->assert($expected == $resp_code,
         test_msg("Expected response code $expected, got $resp_code"));
 
       $expected = 'OK';
-      my $resp_msg = $resp->message;
+      $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
 
@@ -2753,7 +2777,7 @@ sub prom_scrape_metric_file_download {
 
       # Gauge
       $expected = '^# HELP proftpd_file_download_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -3039,12 +3063,12 @@ sub prom_scrape_metric_file_upload {
       }
 
       my $expected = 200;
-      my $resp_code = $resp->code;
+      $resp_code = $resp->code;
       $self->assert($expected == $resp_code,
         test_msg("Expected response code $expected, got $resp_code"));
 
       $expected = 'OK';
-      my $resp_msg = $resp->message;
+      $resp_msg = $resp->message;
       $self->assert($expected eq $resp_msg,
         test_msg("Expected response message '$expected', got '$resp_msg'"));
 
@@ -3069,7 +3093,7 @@ sub prom_scrape_metric_file_upload {
 
       # Gauge
       $expected = '^# HELP proftpd_file_upload_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -3370,7 +3394,7 @@ sub prom_scrape_metric_login_succeeded {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -3527,7 +3551,7 @@ sub prom_scrape_metric_login_multiple_times {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -3682,7 +3706,7 @@ sub prom_scrape_metric_login_user_quit {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -3839,7 +3863,7 @@ sub prom_scrape_metric_login_user_multiple_times {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -4002,7 +4026,7 @@ sub prom_scrape_metric_login_pass_multiple_times {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
@@ -4156,7 +4180,7 @@ sub prom_scrape_metric_login_in_progress {
 
       # Gauge
       $expected = '^# HELP proftpd_login_count .*?\.$';
-      my $seen = saw_expected_content($lines, $expected);
+      $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
