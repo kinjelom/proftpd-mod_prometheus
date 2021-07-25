@@ -61,9 +61,12 @@ jobs:
           apk add libmicrohttpd-dev
           # for SQLite support
           apk add sqlite sqlite-dev
+          # for OpenSSL support
+          apk add openssl openssl-dev
           # for debugging
           clang --version
           gcc --version
+          openssl version -a
 
       - name: Install Centos packages
         if: ${{ matrix.container == 'centos:8' }}
@@ -77,9 +80,12 @@ jobs:
           yum install -y libmicrohttpd-devel
           # for SQLite support
           yum install -y sqlite-devel
+          # for OpenSSL support
+          yum install -y openssl-devel
           # for debugging
           clang --version
           gcc --version
+          openssl version -a
 
       - name: Install Ubuntu packages
         if: ${{ matrix.container == 'ubuntu:18.04' }}
@@ -95,7 +101,25 @@ jobs:
           # for SQLite support
           apt-get install -y libsqlite3-dev sqlite3
 
+          # for OpenSSL support
+          apt-get install -y libssl-dev
+
           # for integration/regression test
+          apt-get install -y \
+            libdata-dumper-simple-perl \
+            libdatetime-perl \
+            libfile-copy-recursive-perl \
+            libfile-path-tiny-perl \
+            libfile-spec-native-perl \
+            libnet-ssh2-perl \
+            libnet-ssleay-perl \
+            libnet-telnet-perl \
+            libposix-2008-perl \
+            libtest-unit-perl \
+            libtime-hr-perl \
+            libwww-perl
+          PERL_MM_USE_DEFAULT=1 perl -MCPAN -e 'install Net::FTPSSL'
+
           # for test code coverage
           apt-get install -y lcov ruby
           gem install coveralls-lcov
@@ -104,6 +128,7 @@ jobs:
           # for debugging
           clang --version
           gcc --version
+          openssl version -a
 
       - name: Prepare code coverage
         if: ${{ matrix.container == 'ubuntu:18.04' }}
@@ -131,6 +156,15 @@ jobs:
         run: |
           cd proftpd
           make install
+
+      - name: Run integration tests
+        if: ${{ matrix.compiler == 'gcc' && matrix.container == 'ubuntu:18.04' }}
+        env:
+          PROFTPD_TEST_BIN: /usr/local/sbin/proftpd
+          PROFTPD_TEST_DIR: ${{ github.workspace }}/proftpd
+        run: |
+          cd proftpd/contrib/mod_prometheus
+          perl tests.pl
 
       - name: Build as shared module
         env:
