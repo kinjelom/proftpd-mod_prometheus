@@ -279,25 +279,6 @@ sub list_tests {
 
 # Support routines
 
-sub create_test_dir {
-  my $setup = shift;
-  my $sub_dir = shift;
-
-  mkpath($sub_dir);
-
-  # Make sure that, if we're running as root, that the sub directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $sub_dir)) {
-      die("Can't set perms on $sub_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $sub_dir)) {
-      die("Can't set owner of $sub_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-}
-
 sub saw_expected_content {
   my $lines = shift;
   my $expected = shift;
@@ -321,19 +302,6 @@ sub prom_start_existing_dirs {
   my $setup = test_setup($tmpdir, 'prometheus');
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
-
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
 
   my $config = {
@@ -395,18 +363,6 @@ sub prom_scrape_unacceptable_method {
   my $setup = test_setup($tmpdir, 'prometheus');
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
-
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
 
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
   if ($ENV{TEST_VERBOSE}) {
@@ -517,18 +473,6 @@ sub prom_scrape_bad_uri {
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
 
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
   if ($ENV{TEST_VERBOSE}) {
     print STDERR "# Using export port = $exporter_port\n";
@@ -638,18 +582,6 @@ sub prom_scrape_base_uri {
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
 
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
   if ($ENV{TEST_VERBOSE}) {
     print STDERR "# Using export port = $exporter_port\n";
@@ -758,18 +690,6 @@ sub prom_scrape_metrics_uri {
   my $setup = test_setup($tmpdir, 'prometheus');
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
-
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
 
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
   if ($ENV{TEST_VERBOSE}) {
