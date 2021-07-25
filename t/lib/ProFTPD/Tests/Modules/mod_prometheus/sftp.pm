@@ -103,19 +103,6 @@ sub prom_scrape_metric_handshake_error_ssh2 {
   my $setup = test_setup($tmpdir, 'prometheus');
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
-
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
 
   my $rsa_host_key = File::Spec->rel2abs("$ENV{PROFTPD_TEST_DIR}/tests/t/etc/modules/mod_sftp/ssh_host_rsa_key");
@@ -251,19 +238,6 @@ sub prom_scrape_metric_sftp_protocol {
   my $setup = test_setup($tmpdir, 'prometheus');
 
   my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
-
-  # Make sure that, if we're running as root, that the home directory has
-  # permissions/privs set for the account we create
-  if ($< == 0) {
-    unless (chmod(0755, $table_dir)) {
-      die("Can't set perms on $table_dir to 0755: $!");
-    }
-
-    unless (chown($setup->{uid}, $setup->{gid}, $table_dir)) {
-      die("Can't set owner of $table_dir to $setup->{uid}/$setup->{gid}: $!");
-    }
-  }
-
   my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
 
   my $rsa_host_key = File::Spec->rel2abs("$ENV{PROFTPD_TEST_DIR}/tests/t/etc/modules/mod_sftp/ssh_host_rsa_key");

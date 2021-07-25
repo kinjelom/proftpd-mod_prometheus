@@ -140,7 +140,7 @@ jobs:
           CC: ${{ matrix.compiler }}
         run: |
           cd proftpd
-          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel=coverage --enable-tests --with-modules=mod_prometheus
+          ./configure LIBS="-lm -lsubunit -lrt -pthread" --enable-devel=coverage --enable-tests --with-modules=mod_prometheus:mod_sftp:mod_tls
           make
 
       - name: Run unit tests
