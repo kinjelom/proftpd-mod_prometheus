@@ -55,7 +55,7 @@ install: install-misc
 install-misc:
 
 clean:
-	$(LIBTOOL) --mode=clean $(RM) $(MODULE_NAME).a $(MODULE_NAME).la *.o *.lo .libs/*.o lib/prometheus/*.o lib/prometheus/*.lo
+	$(LIBTOOL) --mode=clean $(RM) $(MODULE_NAME).a $(MODULE_NAME).la *.o *.lo .libs/*.o lib/prometheus/*.o lib/prometheus/metric/*.o lib/prometheus/*.lo lib/prometheus/metric/*.lo
 	cd t/ && $(MAKE) clean
 
 # Run the API tests

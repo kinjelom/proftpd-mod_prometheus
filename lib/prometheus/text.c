@@ -177,21 +177,21 @@ const char *prom_text_from_labels(pool *p, struct prom_text *text,
   key_names = keys->elts;
   prom_text_add_byte(text, '{');
   for (i = 0; i < keys->nelts; i++) {
-    size_t keysz, valsz;
-    char *key;
+    size_t key_namesz, valsz;
+    char *key_name;
     const void *val;
 
     if (i != 0) {
       prom_text_add_byte(text, ',');
     }
 
-    key = key_names[i];
-    keysz = strlen(key);
-    prom_text_add_str(text, key, keysz);
+    key_name = key_names[i];
+    key_namesz = strlen(key_name);
+    prom_text_add_str(text, key_name, key_namesz);
     prom_text_add_byte(text, '=');
     prom_text_add_byte(text, '"');
 
-    val = pr_table_get(labels, key, &valsz);
+    val = pr_table_get(labels, key_name, &valsz);
 
     /* Note that we _subtract_ one here, because tables store values as
      * opaque objects, and thus include the terminating NUL for text.  But

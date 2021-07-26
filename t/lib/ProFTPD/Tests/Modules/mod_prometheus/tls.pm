@@ -245,10 +245,12 @@ sub prom_scrape_metric_handshake_error_tls_data {
     ScoreboardFile => $setup->{scoreboard_file},
     SystemLog => $setup->{log_file},
     TraceLog => $setup->{log_file},
-    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 tls:20',
+    Trace => 'event:20 prometheus:20 prometheus.db:20 prometheus.http:20 tls:20',
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
+
+    TimeoutLinger => 1,
 
     IfModules => {
       'mod_delay.c' => {
@@ -311,12 +313,22 @@ sub prom_scrape_metric_handshake_error_tls_data {
       }
 
       my $data_opts = {
-        SSL_version => 'SSLv3',
+        SSL_cipher_list => 'MD5',
 
         # Explicitly disable reuse of the control session; necessary for
         # our other options to be honored.
         SSL_reuse_ctx => undef,
       };
+
+      # Note: If we need to use different tricks here, depending on the
+      # OpenSSL version used by Net::SSLeay (because of _e.g._ dropping of
+      # SSLv3 support in OpenSSL 1.1.1x), we can use:
+      #
+      #  perl -mNet::SSLeay -e 'print Net::SSLeay::OpenSSL_version('OPENSSL_VERSION'), "\n";'
+      #  OpenSSL 1.1.1  11 Sep 2018
+      #
+      # For now, we assume that the MD5 ciphersuites are sufficiently
+      # disabled on a widespread enough basis to suffice for our needs.
 
       unless ($client->set_dc_from_hash($data_opts) == 2) {
         die("Can't set Net-FTPSSL data conn TLS cipher list");
@@ -331,9 +343,9 @@ sub prom_scrape_metric_handshake_error_tls_data {
         die("LIST succeeded unexpectedly");
       }
 
-      $client->quit();
+      eval { $client->quit() };
 
-      sleep(1);
+      sleep(2);
 
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
