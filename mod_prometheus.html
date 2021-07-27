@@ -58,7 +58,7 @@ scraping metrics.
 <p>
 <hr>
 <h3><a name="PrometheusExporter">PrometheusExporter</a></h3>
-<strong>Syntax:</strong> PrometheusExporter <em>address[:port]</em><br>
+<strong>Syntax:</strong> PrometheusExporter <em>address[:port] [username password]</em><br>
 <strong>Default:</strong> None<br>
 <strong>Context:</strong> server config</br>
 <strong>Module:</strong> mod_prometheus<br>
@@ -68,6 +68,10 @@ scraping metrics.
 The <code>PrometheusExporter</code> directive configures the
 <code>mod_prometheus</code> module to act as an exporter for scraping by
 Prometheus.
+
+<p>
+<b>Note</b> that the <code>PrometheusExporter</code> directive is
+<b>required</b>.
 
 <p>
 The <em>address</em> parameter can be an IP address or a DNS name; this
@@ -84,7 +88,14 @@ contain colons as well, <i>e.g.</i>:
 </pre>
 
 <p>
-Note that the <code>PrometheusExporter</code> directive is <b>required</b>.
+HTTP basic authentication can be required by providing the optional
+<em>username</em> and <em>password</em> parameters.  The following environment
+variables can also be used, instead of configuring these credentials in the
+config file:
+<ul>
+  <li><code>PROMETHEUS_USERNAME</code>
+  <li><code>PROMETHEUS_PASSWORD</code>
+</ul>
 
 <p>
 <hr>

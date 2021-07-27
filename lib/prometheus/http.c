@@ -53,6 +53,11 @@ struct prom_http {
   struct MHD_Daemon *mhd;
 };
 
+/* HTTP Basic Auth settings. */
+static const char *http_realm = "proftpd";
+static const char *http_username = NULL;
+static const char *http_password = NULL;
+
 static const char *trace_channel = "prometheus.http";
 static const char *clf_channel = "prometheus.http.clf";
 
@@ -196,8 +201,84 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
   if (strcmp(http_uri, "/metrics") == 0) {
     int xerrno;
+    char *request_username = NULL;
 
-    pr_trace_msg(trace_channel, 19, "exporter received /metrics request");
+    if (http_username != NULL) {
+      char *request_password = NULL;
+      int auth_failed = TRUE;
+
+      pr_trace_msg(trace_channel, 19,
+        "exporter received /metrics request, validating basic auth");
+
+      request_username = MHD_basic_auth_get_username_password(conn,
+        &request_password);
+
+      if (request_username == NULL) {
+        pr_trace_msg(trace_channel, 19,
+          "/metrics request lacks required credentials, rejecting");
+        auth_failed = TRUE;
+
+      } else {
+        if (strcmp(request_username, http_username) == 0) {
+          if (strcmp(request_password, http_password) == 0) {
+            char *ptr;
+
+            /* Authenticated. */
+            auth_failed = FALSE;
+            pr_trace_msg(trace_channel, 19,
+              "/metrics request from '%s' validated", request_username);
+
+            /* Free the username memory from libmicrohttpd, but keep a
+             * copy for ourselves, for CLF logging, first.
+             */
+            ptr = request_username;
+            request_username = pstrdup(resp_pool, ptr);
+            free(ptr);
+
+          } else {
+            /* Wrong password. */
+            pr_trace_msg(trace_channel, 19,
+              "/metrics request from '%s' used wrong password, rejecting",
+              request_username);
+            auth_failed = TRUE;
+          }
+
+        } else {
+          /* Wrong username. */
+          pr_trace_msg(trace_channel, 19,
+            "/metrics request used wrong username '%s', rejecting",
+            request_username);
+          auth_failed = TRUE;
+        }
+      }
+
+      if (request_password != NULL) {
+        free(request_password);
+        request_password = NULL;
+      }
+
+      if (auth_failed == TRUE) {
+        text = "Authentication required\n";
+        textlen = strlen(text);
+        status_code = MHD_HTTP_UNAUTHORIZED;
+
+        resp = MHD_create_response_from_buffer(textlen, (void *) text,
+          MHD_RESPMEM_PERSISTENT);
+        (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
+          "text/plain");
+        res = MHD_queue_basic_auth_fail_response(conn, http_realm, resp);
+        MHD_destroy_response(resp);
+
+        log_clf(resp_pool, conn, request_username, http_method, http_uri,
+          http_version, status_code, textlen);
+        destroy_pool(resp_pool);
+
+        return res;
+      }
+
+    } else {
+      pr_trace_msg(trace_channel, 19, "exporter received /metrics request");
+    }
 
     text = prom_registry_get_text(resp_pool, http->registry);
     xerrno = errno;
@@ -232,8 +313,8 @@ static enum MHD_Result handle_request_cb(void *user_data,
       res = MHD_queue_response(conn, status_code, resp);
       MHD_destroy_response(resp);
 
-      log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
-        status_code, textlen);
+      log_clf(resp_pool, conn, request_username, http_method, http_uri,
+        http_version, status_code, textlen);
       destroy_pool(resp_pool);
 
       return res;
@@ -251,8 +332,8 @@ static enum MHD_Result handle_request_cb(void *user_data,
     res = MHD_queue_response(conn, status_code, resp);
     MHD_destroy_response(resp);
 
-    log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
-      status_code, textlen);
+    log_clf(resp_pool, conn, request_username, http_method, http_uri,
+      http_version, status_code, textlen);
     destroy_pool(resp_pool);
 
     return res;
@@ -280,7 +361,8 @@ static enum MHD_Result handle_request_cb(void *user_data,
 }
 
 struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
-    struct prom_registry *registry) {
+    struct prom_registry *registry, const char *username,
+    const char *password) {
   struct prom_http *http;
   pool *http_pool;
   struct MHD_Daemon *mhd;
@@ -302,7 +384,8 @@ struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
   http->registry = registry;
 
   http_port = ntohs(pr_netaddr_get_port(addr));
-  pr_trace_msg(trace_channel, 9, "starting exporter on %s:%u",
+  pr_trace_msg(trace_channel, 9, "starting exporter %son %s:%u",
+    username != NULL ? "requiring basic auth " : "",
     pr_netaddr_get_ipstr(addr), http_port);
 
   flags = MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_ERROR_LOG|MHD_USE_DEBUG;
@@ -322,7 +405,11 @@ struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
     errno = xerrno;
     return NULL;
   }
+
   http->mhd = mhd;
+  http_username = username;
+  http_password = password;
+
   return http;
 }
 
