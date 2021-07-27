@@ -244,7 +244,8 @@ static void prom_daemonize(const char *daemon_dir) {
   pr_fsio_chdir(daemon_dir, 0);
 }
 
-static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr) {
+static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
+    const char *username, const char *password) {
   pid_t exporter_pid;
   struct prom_dbh *dbh;
   char *exporter_chroot = NULL;
@@ -341,7 +342,7 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr) {
   PRIVS_REVOKE
 
   prometheus_exporter_http = prom_http_start(p, exporter_addr,
-    prometheus_registry);
+    prometheus_registry, username, password);
   if (prometheus_exporter_http == NULL) {
     return 0;
   }
@@ -645,7 +646,7 @@ MODRET set_prometheusengine(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* usage: PrometheusExporter address[:port] */
+/* usage: PrometheusExporter address[:port] [username password] */
 MODRET set_prometheusexporter(cmd_rec *cmd) {
   char *addr, *ptr;
   size_t addrlen;
@@ -653,10 +654,14 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
   pr_netaddr_t *exporter_addr;
   int exporter_port = PROMETHEUS_DEFAULT_EXPORTER_PORT;
 
-  CHECK_ARGS(cmd, 1);
+  if (cmd->argc < 2 ||
+      cmd->argc > 4) {
+    CONF_ERROR(cmd, "wrong number of parameters");
+  }
+
   CHECK_CONF(cmd, CONF_ROOT);
 
-  c = add_config_param(cmd->argv[0], 1, NULL);
+  c = add_config_param(cmd->argv[0], 3, NULL, NULL, NULL);
 
   /* Separate the port out from the address, if present. */
   ptr = strrchr(cmd->argv[1], ':');
@@ -728,6 +733,16 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
 
   pr_netaddr_set_port2(exporter_addr, exporter_port);
   c->argv[0] = exporter_addr;
+
+  if (cmd->argc > 2) {
+    if (cmd->argc == 3) {
+      /* Only username provided?  Why? */
+      CONF_ERROR(cmd, "wrong number of parameters");
+    }
+
+    c->argv[1] = pstrdup(c->pool, cmd->argv[2]);
+    c->argv[2] = pstrdup(c->pool, cmd->argv[3]);
+  }
  
   return PR_HANDLED(cmd);
 }
@@ -1640,6 +1655,7 @@ static void create_metrics(struct prom_dbh *dbh) {
 static void prom_postparse_ev(const void *event_data, void *user_data) {
   config_rec *c;
   pr_netaddr_t *exporter_addr;
+  const char *exporter_username, *exporter_password;
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusEngine", FALSE);
   if (c != NULL) {
@@ -1719,8 +1735,17 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
   }
 
   exporter_addr = c->argv[0];
+  exporter_username = c->argv[1];
+  exporter_password = c->argv[2];
 
-  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_addr);
+  /* Look for the exporter credentials environment variables, too. */
+  if (exporter_username == NULL) {
+    exporter_username = pr_env_get(c->pool, "PROMETHEUS_USERNAME");
+    exporter_password = pr_env_get(c->pool, "PROMETHEUS_PASSWORD");
+  }
+
+  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_addr,
+    exporter_username, exporter_password);
   if (prometheus_exporter_pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION

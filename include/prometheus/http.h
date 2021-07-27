@@ -31,7 +31,7 @@
 struct prom_http;
 
 struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
-  struct prom_registry *registry);
+  struct prom_registry *registry, const char *username, const char *password);
 
 /* This function will exit once the exporter finishes. */
 int prom_http_run_loop(pool *p, struct prom_http *http);
