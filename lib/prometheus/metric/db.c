@@ -183,7 +183,7 @@ int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }
@@ -231,7 +231,7 @@ int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }
@@ -279,7 +279,7 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }
@@ -328,7 +328,7 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }
@@ -371,7 +371,7 @@ static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return -1;
   }
@@ -469,7 +469,7 @@ const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
   const char *stmt, *errstr = NULL;
   array_header *results;
 
-  if (p == NULL |
+  if (p == NULL ||
       dbh == NULL) {
     errno = EINVAL;
     return NULL;
@@ -493,7 +493,7 @@ const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
-      "error executing '%s': %s", stmt, errstr ? errstr : strerror(errno));
+      "error executing '%s': %s", stmt, errstr ? errstr : strerror(xerrno));
     errno = EPERM;
     return NULL;
   }
