@@ -39,7 +39,7 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
 int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   const char *help_text);
 int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
-  const char *help_text);
+  const char *help_text, unsigned int bucket_count, ...);
 int prom_metric_set_dbh(struct prom_metric *metric, struct prom_dbh *dbh);
 
 /* Returns the metric name. */
@@ -73,9 +73,12 @@ int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,
 int prom_metric_set(pool *p, const struct prom_metric *metric, uint32_t val,
   pr_table_t *labels);
 
-/* Returns the collected samples for this metric and type. */
+/* Returns the collected samples for this metric and type.  The `counts`
+ * and `sums` arrays are used for histograms, to differentiate those samples
+ * from the histogram bucket samples.
+ */
 const array_header *prom_metric_get(pool *p, struct prom_metric *metric,
-  int metric_type);
+  int metric_type, const array_header **counts, const array_header **sums);
 #define PROM_METRIC_TYPE_COUNTER	1
 #define PROM_METRIC_TYPE_GAUGE		2
 #define PROM_METRIC_TYPE_HISTOGRAM	3

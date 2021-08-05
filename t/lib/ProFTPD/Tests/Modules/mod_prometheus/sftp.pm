@@ -113,7 +113,7 @@ sub prom_scrape_metric_handshake_error_ssh2 {
     ScoreboardFile => $setup->{scoreboard_file},
     SystemLog => $setup->{log_file},
     TraceLog => $setup->{log_file},
-    Trace => 'prometheus:20 prometheus.http:20 sftp:20',
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 sftp:20',
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
@@ -168,8 +168,6 @@ sub prom_scrape_metric_handshake_error_ssh2 {
       if ($ssh2->connect('127.0.0.1', $port)) {
         die("Connected to SSH server unexpectedly");
       }
-
-      sleep(1);
 
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
@@ -250,7 +248,7 @@ sub prom_scrape_metric_sftp_protocol {
     ScoreboardFile => $setup->{scoreboard_file},
     SystemLog => $setup->{log_file},
     TraceLog => $setup->{log_file},
-    Trace => 'prometheus:20 prometheus.http:20 sftp:20',
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 sftp:20',
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},

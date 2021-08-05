@@ -45,7 +45,7 @@ pool *prometheus_pool = NULL;
 static int prometheus_engine = FALSE;
 static unsigned long prometheus_opts = 0UL;
 static const char *prometheus_tables_dir = NULL;
-static time_t prometheus_connected_ts = 0;
+static uint64_t prometheus_connected_ms = 0;
 
 static struct prom_dbh *prometheus_dbh = NULL;
 static struct prom_registry *prometheus_registry = NULL;
@@ -1000,7 +1000,7 @@ MODRET prom_pre_pass(cmd_rec *cmd) {
 MODRET prom_log_pass(cmd_rec *cmd) {
   const char *metric_name;
   pr_table_t *labels;
-  time_t now = 0;
+  uint64_t now_ms = 0;
 
   if (prometheus_engine == FALSE) {
     return PR_DECLINED(cmd);
@@ -1023,9 +1023,9 @@ MODRET prom_log_pass(cmd_rec *cmd) {
   prom_cmd_incr_type(cmd, metric_name, labels, PROM_METRIC_TYPE_COUNTER);
   prom_cmd_decr(cmd, metric_name, labels);
 
-  now = time(NULL);
+  pr_gettimeofday_millis(&now_ms);
   prom_cmd_observe(cmd, metric_name,
-    (double) now - prometheus_connected_ts, labels);
+    (double) ((now_ms - prometheus_connected_ms) / 1000), labels);
   return PR_DECLINED(cmd);
 }
 
@@ -1259,7 +1259,7 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
       break;
 
     default: {
-      time_t now;
+      uint64_t now_ms = 0;
 
       if (prometheus_saw_user_cmd == TRUE &&
           session.user == NULL) {
@@ -1273,9 +1273,9 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
 
       prom_event_decr("connection", 1, NULL);
 
-      now = time(NULL);
-      prom_event_observe("connection", (double) now - prometheus_connected_ts,
-        NULL);
+      pr_gettimeofday_millis(&now_ms);
+      prom_event_observe("connection",
+        (double) ((now_ms - prometheus_connected_ms) / 1000), NULL);
       break;
     }
   }
@@ -1434,8 +1434,14 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   metric = prom_metric_create(prometheus_pool, "connection", dbh);
   prom_metric_add_counter(metric, "total", "Number of connections");
   prom_metric_add_gauge(metric, "count", "Current count of connections");
+
+  /* Create histogram buckets for connection duration of:
+   *   1s, 5s, 10s, 30s, 1m, 5m, 10m, 1h, 6h, 1d
+   */
   prom_metric_add_histogram(metric, "duration_seconds",
-    "Connection durations in seconds");
+    "Connection durations in seconds", 11, (double) 1, (double) 5, (double) 10,
+    (double) 30, (double) 60, (double) 300, (double) 600, (double) 1800,
+    (double) 3600, (double) 21600, (double) 86400);
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
     pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
@@ -1465,8 +1471,15 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   prom_metric_add_counter(metric, "total",
     "Number of successful file downloads");
   prom_metric_add_gauge(metric, "count", "Current count of file downloads");
+
+  /* Create histogram buckets for file download bytes of:
+   *   10K, 50K, 100K, 1M, 10M, 50M, 100M, 500M, 1G, 100G
+   */
   prom_metric_add_histogram(metric, "bytes",
-    "Amount of data downloaded in bytes");
+    "Amount of data downloaded in bytes", 10, (double) 10240, (double) 51200,
+    (double) 102400, (double) 1048576, (double) 10485760, (double) 52428800,
+    (double) 104857600, (double) 524288000, (double) 1073741824,
+    (double) 107374182400);
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
     pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
@@ -1484,8 +1497,15 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   metric = prom_metric_create(prometheus_pool, "file_upload", dbh);
   prom_metric_add_counter(metric, "total", "Number of successful file uploads");
   prom_metric_add_gauge(metric, "count", "Current count of file uploads");
+
+  /* Create histogram buckets for file upload bytes of:
+   *   10K, 50K, 100K, 1M, 10M, 50M, 100M, 500M, 1G, 100G
+   */
   prom_metric_add_histogram(metric, "bytes",
-    "Amount of data uploaded in bytes");
+    "Amount of data uploaded in bytes", 10, (double) 10240, (double) 51200,
+    (double) 102400, (double) 1048576, (double) 10485760, (double) 52428800,
+    (double) 104857600, (double) 524288000, (double) 1073741824,
+    (double) 107374182400);
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
     pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
@@ -1503,8 +1523,14 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
   metric = prom_metric_create(prometheus_pool, "login", dbh);
   prom_metric_add_counter(metric, "total", "Number of successful logins");
   prom_metric_add_gauge(metric, "count", "Current count of logins");
+
+  /* Create histogram buckets for login duration of:
+   *   10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 30s
+   */
   prom_metric_add_histogram(metric, "delay_seconds",
-    "Delay before login in seconds");
+    "Delay before login in seconds", 11, (double) 0.01, (double) 0.025,
+    (double) 0.05, (double) 0.1, (double) 0.25, (double) 0.5, (double) 1.0,
+    (double) 2.5, (double) 5.0, (double) 10.0, (double) 30.0);
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
     pr_trace_msg(trace_channel, 1, "error registering metric '%s': %s",
@@ -2099,9 +2125,10 @@ static int prom_sess_init(void) {
     pool *tmp_pool;
     pr_table_t *labels;
 
+    pr_gettimeofday_millis(&prometheus_connected_ms);
+
     tmp_pool = make_sub_pool(session.pool);
     labels = prom_get_labels(tmp_pool);
-    prometheus_connected_ts = time(NULL);
     prom_metric_incr(tmp_pool, metric, 1, labels);
     destroy_pool(tmp_pool);
 
