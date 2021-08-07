@@ -278,7 +278,7 @@ START_TEST (metric_add_histogram_test) {
   (void) tests_mkpath(p, test_dir);
 
   mark_point();
-  res = prom_metric_add_histogram(NULL, NULL, NULL);
+  res = prom_metric_add_histogram(NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null metric");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -293,14 +293,14 @@ START_TEST (metric_add_histogram_test) {
   fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
-  res = prom_metric_add_histogram(metric, NULL, NULL);
+  res = prom_metric_add_histogram(metric, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null help");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  suffix = "count";
-  res = prom_metric_add_histogram(metric, suffix, "testing");
+  suffix = "weight";
+  res = prom_metric_add_histogram(metric, suffix, "testing", 0);
   fail_unless(res == 0, "Failed to add histogram to metric: %s",
     strerror(errno));
 
@@ -356,13 +356,13 @@ START_TEST (metric_get_test) {
   (void) tests_mkpath(p, test_dir);
 
   mark_point();
-  results = prom_metric_get(NULL, NULL, 0);
+  results = prom_metric_get(NULL, NULL, 0, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  results = prom_metric_get(p, NULL, 0);
+  results = prom_metric_get(p, NULL, 0, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle null metric");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -377,27 +377,27 @@ START_TEST (metric_get_test) {
   fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, -1);
+  results = prom_metric_get(p, metric, -1, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle unknown metric type");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle counter-less metric");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle gauge-less metric");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, NULL, NULL);
   fail_unless(results == NULL, "Failed to handle histogram-less metric");
-  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
@@ -458,7 +458,7 @@ START_TEST (metric_decr_test) {
   fail_unless(res == 0, "Failed to decrement metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
@@ -474,7 +474,7 @@ START_TEST (metric_decr_test) {
   fail_unless(res == 0, "Failed to decrement metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
@@ -553,7 +553,7 @@ START_TEST (metric_incr_type_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
@@ -570,7 +570,7 @@ START_TEST (metric_incr_type_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
@@ -634,7 +634,7 @@ START_TEST (metric_incr_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
@@ -650,7 +650,7 @@ START_TEST (metric_incr_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
@@ -699,13 +699,13 @@ START_TEST (metric_incr_counter_gauge_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
@@ -721,13 +721,13 @@ START_TEST (metric_incr_counter_gauge_test) {
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
@@ -750,7 +750,7 @@ START_TEST (metric_observe_test) {
   struct prom_metric *metric;
   double observed_val = 3.1415;
   pr_table_t *labels;
-  const array_header *results;
+  const array_header *results, *counts = NULL, *sums = NULL;
 
   (void) tests_rmpath(p, test_dir);
   (void) tests_mkpath(p, test_dir);
@@ -783,7 +783,7 @@ START_TEST (metric_observe_test) {
     strerror(errno), errno);
 
   mark_point();
-  res = prom_metric_add_histogram(metric, "units", "testing");
+  res = prom_metric_add_histogram(metric, "units", "testing", 0);
   fail_unless(res == 0, "Failed to add histogram to metric: %s",
     strerror(errno));
 
@@ -792,12 +792,20 @@ START_TEST (metric_observe_test) {
   fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM);
-
-  /* TODO: Finish histogram implementation. */
-  fail_unless(results == NULL, "Handled histograms unexpectedly");
-  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
-    strerror(errno), errno);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, &counts,
+    &sums);
+  fail_unless(results != NULL, "Failed get histogram results: %s",
+    strerror(errno));
+  fail_unless(results->nelts == 2, "Expected 2 bucket results, got %d",
+    results->nelts);
+  fail_unless(counts != NULL, "Failed get histogram count results: %s",
+    strerror(errno));
+  fail_unless(counts->nelts == 2, "Expected 2 count results, got %d",
+    counts->nelts);
+  fail_unless(sums != NULL, "Failed get histogram sum results: %s",
+    strerror(errno));
+  fail_unless(sums->nelts == 2, "Expected 2 sum results, got %d",
+    sums->nelts);
 
   /* Now, provide labels. */
   labels = pr_table_nalloc(p, 0, 2);
@@ -809,12 +817,21 @@ START_TEST (metric_observe_test) {
   fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM);
-
-  /* TODO: Finish histogram implementation. */
-  fail_unless(results == NULL, "Handled histograms unexpectedly");
-  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
-    strerror(errno), errno);
+  counts = sums = NULL;
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, &counts,
+    &sums);
+  fail_unless(results != NULL, "Failed to get histogram results: %s",
+    strerror(errno));
+  fail_unless(results->nelts == 4, "Expected 4 bucket results, got %d",
+    results->nelts);
+  fail_unless(counts != NULL, "Failed to get histogram count results: %s",
+    strerror(errno));
+  fail_unless(counts->nelts == 4, "Expected 4 count results, got %d",
+    counts->nelts);
+  fail_unless(sums != NULL, "Failed to get histogram sum results: %s",
+    strerror(errno));
+  fail_unless(sums->nelts == 4, "Expected 4 sum results, got %d",
+    sums->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
@@ -874,7 +891,7 @@ START_TEST (metric_set_test) {
   fail_unless(res == 0, "Failed to set metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 2, "Expected 2 results, got %d",
@@ -890,7 +907,7 @@ START_TEST (metric_set_test) {
   fail_unless(res == 0, "Failed to set metric: %s", strerror(errno));
 
   mark_point();
-  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE);
+  results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
   fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
   fail_unless(results->nelts == 4, "Expected 4 results, got %d",
@@ -935,6 +952,11 @@ START_TEST (metric_get_text_test) {
   fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
+  res = prom_metric_add_histogram(metric, "weight", "histogram testing", 0);
+  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+    strerror(errno));
+
+  mark_point();
   res = prom_metric_incr(p, metric, 6, NULL);
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
 
@@ -946,6 +968,10 @@ START_TEST (metric_get_text_test) {
   mark_point();
   res = prom_metric_incr(p, metric, 8, labels);
   fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+
+  mark_point();
+  res = prom_metric_observe(p, metric, 76.42, labels);
+  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
   text = prom_metric_get_text(p, metric, "prt", &textlen);
@@ -973,6 +999,20 @@ START_TEST (metric_get_text_test) {
   fail_unless(
     strstr(text, "prt_test_count{foo=\"BAR\",protocol=\"ftp\"} 8") != NULL,
     "Expected labeled gauge sample");
+
+  fail_unless(strstr(text, "# HELP prt_test_weight") != NULL,
+    "Expected histogram HELP text");
+  fail_unless(strstr(text, "# TYPE prt_test_weight histogram") != NULL,
+    "Expected histogram TYPE text");
+  fail_unless(
+    strstr(text, "prt_test_weight_bucket{foo=\"BAR\",le=\"+Inf\",protocol=\"ftp\"} 1") != NULL,
+    "Expected labeled histogram bucket sample");
+  fail_unless(
+    strstr(text, "prt_test_weight_count{foo=\"BAR\",protocol=\"ftp\"} 1") != NULL,
+    "Expected labeled histogram count sample");
+  fail_unless(
+    strstr(text, "prt_test_weight_sum{foo=\"BAR\",protocol=\"ftp\"} 76.42") != NULL,
+    "Expected labeled histogram sum sample");
 
   mark_point();
   res = prom_metric_destroy(p, metric);

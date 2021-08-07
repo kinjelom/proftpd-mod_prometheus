@@ -1668,6 +1668,7 @@ sub prom_scrape_metric_connection {
 
       my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
       $client->login($setup->{user}, $setup->{passwd});
+      sleep(1);
       $client->quit();
 
       my $ua = LWP::UserAgent->new();
@@ -1723,7 +1724,35 @@ sub prom_scrape_metric_connection {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_connection_count\{protocol="ftp"\} 0$';
+      # Race: sometimes the session has not yet finished.
+      $expected = '^proftpd_connection_count\{protocol="ftp"\} (0|1)$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Histogram
+
+      $expected = '^# HELP proftpd_connection_duration_seconds .*?\.$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_connection_duration_seconds histogram$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_connection_duration_seconds_bucket\{le="\+Inf",protocol="ftp"\} \d+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_connection_duration_seconds_count\{protocol="ftp"\} 1$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_connection_duration_seconds_sum\{protocol="ftp"\} \d+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -2607,6 +2636,9 @@ sub prom_scrape_metric_auth_error_incomplete {
       $client->user('foo');
       $client->quit();
 
+      # Allow time for the session to end before scraping.
+      sleep(2);
+
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
 
@@ -3091,6 +3123,7 @@ sub prom_scrape_metric_file_download {
       my $lines = [split(/\n/, $content)];
 
       # Counter
+
       $expected = '^# HELP proftpd_file_download_total .*?\.$';
       my $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3107,6 +3140,7 @@ sub prom_scrape_metric_file_download {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       # Gauge
+
       $expected = '^# HELP proftpd_file_download_count .*?\.$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3118,6 +3152,33 @@ sub prom_scrape_metric_file_download {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       $expected = '^proftpd_file_download_count\{protocol="ftp"\} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Histogram
+
+      $expected = '^# HELP proftpd_file_download_bytes .*?\.$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_download_bytes histogram$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_bytes_bucket\{le="\+Inf",protocol="ftp"\} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_bytes_count\{protocol="ftp"\} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_download_bytes_sum\{protocol="ftp"\} 32768+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3383,6 +3444,7 @@ sub prom_scrape_metric_file_upload {
       my $lines = [split(/\n/, $content)];
 
       # Counter
+
       $expected = '^# HELP proftpd_file_upload_total .*?\.$';
       my $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3399,6 +3461,7 @@ sub prom_scrape_metric_file_upload {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       # Gauge
+
       $expected = '^# HELP proftpd_file_upload_count .*?\.$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3410,6 +3473,33 @@ sub prom_scrape_metric_file_upload {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       $expected = '^proftpd_file_upload_count\{protocol="ftp"\} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Histogram
+
+      $expected = '^# HELP proftpd_file_upload_bytes .*?\.$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_file_upload_bytes histogram$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_bytes_bucket\{le="\+Inf",protocol="ftp"\} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_bytes_count\{protocol="ftp"\} 1+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_file_upload_bytes_sum\{protocol="ftp"\} 13+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3660,6 +3750,7 @@ sub prom_scrape_metric_login_succeeded {
       my $lines = [split(/\n/, $content)];
 
       # Counter
+
       $expected = '^# HELP proftpd_login_total .*?\.$';
       my $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3676,6 +3767,7 @@ sub prom_scrape_metric_login_succeeded {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       # Gauge
+
       $expected = '^# HELP proftpd_login_count .*?\.$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
@@ -3687,6 +3779,33 @@ sub prom_scrape_metric_login_succeeded {
         test_msg("Did not see '$expected' in '$content' as expected"));
 
       $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      # Histogram
+
+      $expected = '^# HELP proftpd_login_delay_seconds .*?\.$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^# TYPE proftpd_login_delay_seconds histogram$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_delay_seconds_bucket\{le="\+Inf",protocol="ftp"\} 1$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_delay_seconds_count\{protocol="ftp"\} 1$';
+      $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
+
+      $expected = '^proftpd_login_delay_seconds_sum\{protocol="ftp"\} \d+$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
@@ -3974,7 +4093,8 @@ sub prom_scrape_metric_login_user_quit {
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));
 
-      $expected = '^proftpd_login_count\{protocol="ftp"\} 0+$';
+      # Race: sometimes the session has not yet finished.
+      $expected = '^proftpd_login_count\{protocol="ftp"\} (0|1)$';
       $seen = saw_expected_content($lines, $expected);
       $self->assert($seen,
         test_msg("Did not see '$expected' in '$content' as expected"));

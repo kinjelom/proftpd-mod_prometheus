@@ -27,6 +27,13 @@
 #include "prometheus/metric/db.h"
 #include "prometheus/text.h"
 
+struct prom_histogram_bucket {
+  int64_t bucket_id;
+  int is_inf_bucket;
+  double upper_bound;
+  const char *upper_bound_text;
+};
+
 struct prom_metric {
   pool *pool;
   struct prom_dbh *dbh;
@@ -47,11 +54,16 @@ struct prom_metric {
   size_t gauge_helplen;
 
   /* Histogram */
-  int64_t histogram_id;
   const char *histogram_name;
   size_t histogram_namelen;
   const char *histogram_help;
   size_t histogram_helplen;
+  unsigned int histogram_bucket_count;
+  struct prom_histogram_bucket **histogram_buckets;
+  const char *histogram_count_name;
+  int64_t histogram_count_id;
+  const char *histogram_sum_name;
+  int64_t histogram_sum_id;
 };
 
 static const char *trace_channel = "prometheus.metric";
@@ -110,16 +122,60 @@ static struct prom_text *add_type_text(struct prom_text *text,
   return text;
 }
 
+static struct prom_text *add_histogram_text(struct prom_text *text,
+    const char *registry_name, size_t registry_namelen,
+    const char *name, size_t namelen, const char *suffix, size_t suffixlen,
+    const array_header *results) {
+  register unsigned int i;
+  char **elts;
+
+  if (results->nelts == 0) {
+    return text;
+  }
+
+  elts = results->elts;
+  for (i = 0; i < results->nelts; i += 2) {
+    double sample_val;
+    char sample_text[50], *sample_labels, *ptr = NULL;
+    size_t sample_labelslen;
+    int sample_textlen;
+
+    sample_val = strtod(elts[i], &ptr);
+    memset(sample_text, '\0', sizeof(sample_text));
+    sample_textlen = snprintf(sample_text, sizeof(sample_text)-1, "%0.17g",
+      sample_val);
+
+    sample_labels = elts[i+1];
+    sample_labelslen = strlen(sample_labels);
+
+    prom_text_add_str(text, registry_name, registry_namelen);
+    prom_text_add_byte(text, '_');
+    prom_text_add_str(text, name, namelen);
+    prom_text_add_str(text, suffix, suffixlen);
+
+    if (sample_labelslen > 0) {
+      prom_text_add_str(text, sample_labels, sample_labelslen);
+    }
+
+    prom_text_add_byte(text, ' ');
+    prom_text_add_str(text, sample_text, sample_textlen);
+    prom_text_add_byte(text, '\n');
+  }
+
+  return text;
+}
+
 static struct prom_text *add_metric_type_text(pool *p,
     struct prom_metric *metric, struct prom_text *text,
     const char *registry_name, size_t registry_namelen, int metric_type) {
   register unsigned int i;
-  const array_header *results;
+  const array_header *results, *histogram_counts = NULL, *histogram_sums = NULL;
   const char *type_name, *type_help;
   size_t type_namelen, type_helplen;
   char **elts;
 
-  results = prom_metric_get(p, metric, metric_type);
+  results = prom_metric_get(p, metric, metric_type, &histogram_counts,
+    &histogram_sums);
   if (results == NULL) {
     return NULL;
   }
@@ -140,8 +196,11 @@ static struct prom_text *add_metric_type_text(pool *p,
       break;
 
     case PROM_METRIC_TYPE_HISTOGRAM:
-      errno = ENOSYS;
-      return NULL;
+      type_name = metric->histogram_name;
+      type_namelen = metric->histogram_namelen;
+      type_help = metric->histogram_help;
+      type_helplen = metric->histogram_helplen;
+      break;
 
     default:
       errno = EINVAL;
@@ -158,8 +217,6 @@ static struct prom_text *add_metric_type_text(pool *p,
     prom_text_add_str(text, registry_name, registry_namelen);
     prom_text_add_byte(text, '_');
     prom_text_add_str(text, type_name, type_namelen);
-
-    /* TODO: What's the default for a histogram? */
     prom_text_add_str(text, " 0\n", 3);
 
     return text;
@@ -184,6 +241,14 @@ static struct prom_text *add_metric_type_text(pool *p,
     prom_text_add_byte(text, '_');
     prom_text_add_str(text, type_name, type_namelen);
 
+    /* XXX For histogram buckets, ensure "+Inf" bucket is last. */
+    if (metric_type == PROM_METRIC_TYPE_HISTOGRAM) {
+      /* For histograms, `results` contains the bucket samples; name them
+       * accordingly.
+       */
+      prom_text_add_str(text, "_bucket", 7);
+    }
+
     if (sample_labelslen > 0) {
       prom_text_add_str(text, sample_labels, sample_labelslen);
     }
@@ -191,6 +256,13 @@ static struct prom_text *add_metric_type_text(pool *p,
     prom_text_add_byte(text, ' ');
     prom_text_add_str(text, sample_text, sample_textlen);
     prom_text_add_byte(text, '\n');
+  }
+
+  if (metric_type == PROM_METRIC_TYPE_HISTOGRAM) {
+    add_histogram_text(text, registry_name, registry_namelen, type_name,
+      type_namelen, "_count", 6, histogram_counts);
+    add_histogram_text(text, registry_name, registry_namelen, type_name,
+      type_namelen, "_sum", 4, histogram_sums);
   }
 
   return text;
@@ -247,7 +319,8 @@ const char *prom_metric_get_text(pool *p, struct prom_metric *metric,
 
 /* Returns the samples collected for this metric and type. */
 const array_header *prom_metric_get(pool *p, struct prom_metric *metric,
-    int metric_type) {
+    int metric_type, const array_header **histogram_counts,
+    const array_header **histogram_sums) {
   const array_header *results = NULL;
 
   if (p == NULL ||
@@ -287,10 +360,67 @@ const array_header *prom_metric_get(pool *p, struct prom_metric *metric,
       }
       break;
 
-    case PROM_METRIC_TYPE_HISTOGRAM:
-      /* Not yet implemented. */
-      errno = ENOSYS;
-      return NULL;
+    case PROM_METRIC_TYPE_HISTOGRAM: {
+      register unsigned int i;
+      const array_header *sample_results;
+
+      if (metric->histogram_name == NULL) {
+        /* No histogram associated with this metric. */
+        errno = EPERM;
+        return NULL;
+      }
+
+      /* For histograms, the caller needs to provide ways to return the
+       * count/sum as well.
+       */
+      if (histogram_counts == NULL ||
+          histogram_sums == NULL) {
+        errno = EINVAL;
+        return NULL;
+      }
+
+      for (i = 0; i < metric->histogram_bucket_count; i++) {
+        struct prom_histogram_bucket *bucket;
+        const array_header *bucket_results;
+
+        bucket = ((struct prom_histogram_bucket **) metric->histogram_buckets)[i];
+        bucket_results = prom_metric_db_sample_get(p, metric->dbh,
+          bucket->bucket_id);
+        if (bucket_results != NULL) {
+          pr_trace_msg(trace_channel, 17,
+            "found samples (%d) for histogram bucket '%s' metric '%s'",
+            bucket_results->nelts/2, bucket->upper_bound_text,
+            metric->histogram_name);
+        }
+
+        if (results != NULL) {
+          array_cat((array_header *) results, bucket_results);
+
+        } else {
+          results = bucket_results;
+        }
+      }
+
+      sample_results = prom_metric_db_sample_get(p, metric->dbh,
+        metric->histogram_count_id);
+      if (sample_results != NULL) {
+        pr_trace_msg(trace_channel, 17,
+          "found samples (%d) for histogram bucket 'count' metric '%s'",
+          sample_results->nelts/2, metric->histogram_name);
+      }
+      *histogram_counts = sample_results;
+
+      sample_results = prom_metric_db_sample_get(p, metric->dbh,
+        metric->histogram_sum_id);
+      if (sample_results != NULL) {
+        pr_trace_msg(trace_channel, 17,
+          "found samples (%d) for histogram bucket 'sum' metric '%s'",
+          sample_results->nelts/2, metric->histogram_name);
+      }
+      *histogram_sums = sample_results;
+
+      return results;
+    }
 
     default:
       pr_trace_msg(trace_channel, 9,
@@ -435,6 +565,7 @@ int prom_metric_incr(pool *p, const struct prom_metric *metric, uint32_t val,
 
 int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,
     pr_table_t *labels) {
+  register int i;
   int res;
   pool *tmp_pool;
   struct prom_text *text;
@@ -453,16 +584,54 @@ int prom_metric_observe(pool *p, const struct prom_metric *metric, double val,
   }
 
   tmp_pool = make_sub_pool(p);
+
+  /* We start with the largest bucket, and work our way down. */
+  for (i = metric->histogram_bucket_count-1; i >= 0; i--) {
+    struct prom_histogram_bucket *bucket;
+
+    bucket = ((struct prom_histogram_bucket **) metric->histogram_buckets)[i];
+    if (val > bucket->upper_bound &&
+        bucket->is_inf_bucket == FALSE) {
+      /* Value is too large for this bucket. */
+      break;
+    }
+
+    (void) pr_table_add(labels, "le", bucket->upper_bound_text, 0);
+    text = prom_text_create(tmp_pool);
+    label_str = prom_text_from_labels(tmp_pool, text, labels);
+
+    res = prom_metric_db_sample_incr(p, metric->dbh, bucket->bucket_id,
+      (double) 1.0, label_str);
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 12, "error observing '%s' with %g: %s",
+        metric->histogram_name, val, strerror(errno));
+    }
+
+    prom_text_destroy(text);
+    (void) pr_table_remove(labels, "le", NULL);
+  }
+
   text = prom_text_create(tmp_pool);
   label_str = prom_text_from_labels(tmp_pool, text, labels);
 
-  /* TODO: Finish sampling for histograms. */
-  res = 0;
+  res = prom_metric_db_sample_incr(p, metric->dbh, metric->histogram_count_id,
+    (double) 1.0, label_str);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
+      metric->histogram_count_name, (unsigned long) val, strerror(errno));
+  }
+
+  res = prom_metric_db_sample_incr(p, metric->dbh, metric->histogram_sum_id,
+    val, label_str);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 12, "error incrementing '%s' by %lu: %s",
+      metric->histogram_sum_name, (unsigned long) val, strerror(errno));
+  }
 
   prom_text_destroy(text);
   destroy_pool(tmp_pool);
 
-  return res;
+  return 0;
 }
 
 int prom_metric_set(pool *p, const struct prom_metric *metric, uint32_t val,
@@ -540,7 +709,7 @@ int prom_metric_add_counter(struct prom_metric *metric, const char *suffix,
   metric->counter_id = counter_id;
   pr_trace_msg(trace_channel, 27,
     "added '%s' counter metric (ID %lld) to database", metric->counter_name,
-    metric->counter_id);
+    (long long int) metric->counter_id);
   return 0;
 }
 
@@ -587,14 +756,30 @@ int prom_metric_add_gauge(struct prom_metric *metric, const char *suffix,
   metric->gauge_id = gauge_id;
   pr_trace_msg(trace_channel, 27,
     "added '%s' gauge metric (ID %lld) to database", metric->gauge_name,
-    metric->gauge_id);
+    (long long int) metric->gauge_id);
   return 0;
 }
 
+static const char *get_double_text(pool *p, double val) {
+  char *text;
+  size_t text_len;
+
+  text_len = 50;
+  text = pcalloc(p, text_len);
+  snprintf(text, text_len-1, "%f", val);
+
+  if (strstr(text, ".") == NULL) {
+    strcat(text, ".0");
+  }
+
+  return text;
+}
+
 int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
-    const char *help_text) {
-  int res;
-  int64_t histogram_id;
+    const char *help_text, unsigned int bucket_count, ...) {
+  register unsigned int i;
+  int res, xerrno, have_error = FALSE;
+  va_list ap;
 
   if (metric == NULL ||
       help_text == NULL) {
@@ -614,28 +799,110 @@ int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
   metric->histogram_help = pstrdup(metric->pool, help_text);
   metric->histogram_helplen = strlen(metric->histogram_help);
 
+  /* Add one more for the "+Inf" bucket. */
+  metric->histogram_bucket_count = bucket_count + 1;
+  metric->histogram_buckets = pcalloc(metric->pool,
+    sizeof(struct prom_histogram_bucket *) * metric->histogram_bucket_count);
+  for (i = 0; i < metric->histogram_bucket_count; i++) {
+    metric->histogram_buckets[i] = pcalloc(metric->pool,
+      sizeof(struct prom_histogram_bucket));
+  }
+
+  va_start(ap, bucket_count);
+  for (i = 0; i < metric->histogram_bucket_count; i++) {
+    struct prom_histogram_bucket *bucket;
+    const char *sample_name;
+
+    bucket = ((struct prom_histogram_bucket **) metric->histogram_buckets)[i];
+
+    if (i != metric->histogram_bucket_count-1) {
+      bucket->upper_bound = va_arg(ap, double);
+      bucket->upper_bound_text = get_double_text(metric->pool,
+        bucket->upper_bound);
+      sample_name = pstrcat(metric->pool, metric->histogram_name, "_",
+        bucket->upper_bound_text, NULL);
+
+    } else {
+      /* The "+Inf" bucket. */
+      bucket->is_inf_bucket = TRUE;
+      bucket->upper_bound_text = pstrdup(metric->pool, "+Inf");
+      sample_name = pstrcat(metric->pool, metric->histogram_name, "_inf", NULL);
+    }
+
+    res = prom_metric_db_exists(metric->pool, metric->dbh, sample_name);
+    if (res == 0) {
+      pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
+        sample_name);
+      xerrno = EEXIST;
+      have_error = TRUE;
+      break;
+    }
+
+    res = prom_metric_db_create(metric->pool, metric->dbh,
+      sample_name, PROM_METRIC_TYPE_HISTOGRAM, &(bucket->bucket_id));
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
+        sample_name, strerror(errno));
+      xerrno = EEXIST;
+      have_error = TRUE;
+      break;
+    }
+  }
+  va_end(ap);
+
+  if (have_error == TRUE) {
+    errno = xerrno;
+    return -1;
+  }
+
+  /* The histogram "count" sample. */
+  metric->histogram_count_name = pstrcat(metric->pool, metric->histogram_name,
+    "_count", NULL);
   res = prom_metric_db_exists(metric->pool, metric->dbh,
-    metric->histogram_name);
+    metric->histogram_count_name);
   if (res == 0) {
     pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
-      metric->histogram_name);
+      metric->histogram_count_name);
     errno = EEXIST;
     return -1;
   }
 
-  res = prom_metric_db_create(metric->pool, metric->dbh, metric->histogram_name,
-    PROM_METRIC_TYPE_HISTOGRAM, &histogram_id);
+  res = prom_metric_db_create(metric->pool, metric->dbh,
+    metric->histogram_count_name, PROM_METRIC_TYPE_HISTOGRAM,
+    &(metric->histogram_count_id));
   if (res < 0) {
     pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
-      metric->histogram_name, strerror(errno));
+      metric->histogram_count_name, strerror(errno));
     errno = EEXIST;
     return -1;
   }
 
-  metric->histogram_id = histogram_id;
+  /* The histogram "sum" sample. */
+  metric->histogram_sum_name = pstrcat(metric->pool, metric->histogram_name,
+    "_sum", NULL);
+  res = prom_metric_db_exists(metric->pool, metric->dbh,
+    metric->histogram_sum_name);
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 3, "'%s' metric already exists in database",
+      metric->histogram_sum_name);
+    errno = EEXIST;
+    return -1;
+  }
+
+  res = prom_metric_db_create(metric->pool, metric->dbh,
+    metric->histogram_sum_name, PROM_METRIC_TYPE_HISTOGRAM,
+    &(metric->histogram_sum_id));
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 3, "error adding '%s' metric to database: %s",
+      metric->histogram_sum_name, strerror(errno));
+    errno = EEXIST;
+    return -1;
+  }
+
   pr_trace_msg(trace_channel, 27,
-    "added '%s' histogram metric (ID %lld) to database", metric->histogram_name,
-    metric->histogram_id);
+    "added '%s' histogram metric (count ID %lld, sum ID %lld) to database",
+    metric->histogram_name, (long long) metric->histogram_count_id,
+    (long long) metric->histogram_sum_id);
   return 0;
 }
 
