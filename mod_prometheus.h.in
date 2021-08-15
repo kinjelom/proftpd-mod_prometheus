@@ -52,7 +52,7 @@
 /* Define if you have the sqlite3_trace_v2() function.  */
 #undef HAVE_SQLITE3_TRACE_V2
 
-#define MOD_PROMETHEUS_VERSION	"mod_prometheus/0.1"
+#define MOD_PROMETHEUS_VERSION	"mod_prometheus/0.2"
 
 /* Make sure the version of proftpd is as necessary. */
 #if PROFTPD_VERSION_NUMBER < 0x0001030706

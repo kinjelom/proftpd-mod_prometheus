@@ -57,12 +57,16 @@ jobs:
           apk add bash build-base clang compiler-rt-static gcc make zlib-dev
           # for unit tests
           apk add check check-dev subunit subunit-dev
+
           # for libmicrohttpd support
           apk add libmicrohttpd-dev
           # for SQLite support
           apk add sqlite sqlite-dev
           # for OpenSSL support
           apk add openssl openssl-dev
+          # for zlib support
+          apk add zlib-dev
+
           # for debugging
           clang --version
           gcc --version
@@ -82,6 +86,9 @@ jobs:
           yum install -y sqlite-devel
           # for OpenSSL support
           yum install -y openssl-devel
+          # for zlib support
+          yum install -y zlib-devel
+
           # for debugging
           clang --version
           gcc --version
@@ -100,12 +107,14 @@ jobs:
           apt-get install -y libmicrohttpd-dev
           # for SQLite support
           apt-get install -y libsqlite3-dev sqlite3
-
           # for OpenSSL support
           apt-get install -y libssl-dev
+          # for zlib support
+          apt-get install -y zlib1g-dev
 
           # for integration/regression test
           apt-get install -y \
+            libcompress-raw-zlib-perl \
             libdata-dumper-simple-perl \
             libdatetime-perl \
             libfile-copy-recursive-perl \

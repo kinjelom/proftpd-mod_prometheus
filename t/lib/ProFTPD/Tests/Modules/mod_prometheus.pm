@@ -42,6 +42,11 @@ my $TESTS = {
     test_class => [qw(forking prometheus)],
   },
 
+  prom_scrape_metrics_uri_with_gzip => {
+    order => ++$order,
+    test_class => [qw(forking prometheus)],
+  },
+
   prom_scrape_metrics_uri_with_basic_auth_success => {
     order => ++$order,
     test_class => [qw(forking prometheus)],
@@ -258,9 +263,6 @@ sub list_tests {
       return qw(testsuite_empty_test);
     }
   }
-
-  # TO ADD:
-  #  prom_scrape_metrics_uri_with_gzip
 
   return testsuite_get_runnable_tests($TESTS);
 }
@@ -757,6 +759,130 @@ sub prom_scrape_metrics_uri {
       $expected = 'text/plain';
       $self->assert($expected eq $content_type,
         test_msg("Expected Content-Type '$expected', got '$content_type'"));
+    };
+    if ($@) {
+      $ex = $@;
+    }
+
+    $wfh->print("done\n");
+    $wfh->flush();
+
+  } else {
+    eval { server_wait($setup->{config_file}, $rfh) };
+    if ($@) {
+      warn($@);
+      exit 1;
+    }
+
+    exit 0;
+  }
+
+  # Stop server
+  server_stop($setup->{pid_file});
+  $self->assert_child_ok($pid);
+
+  test_cleanup($setup->{log_file}, $ex);
+}
+
+sub prom_scrape_metrics_uri_with_gzip {
+  my $self = shift;
+  my $tmpdir = $self->{tmpdir};
+  my $setup = test_setup($tmpdir, 'prometheus');
+
+  my $table_dir = File::Spec->rel2abs("$tmpdir/var/prometheus");
+
+  my $exporter_port = ProFTPD::TestSuite::Utils::get_high_numbered_port();
+  if ($ENV{TEST_VERBOSE}) {
+    print STDERR "# Using export port = $exporter_port\n";
+  }
+
+  my $config = {
+    PidFile => $setup->{pid_file},
+    ScoreboardFile => $setup->{scoreboard_file},
+    SystemLog => $setup->{log_file},
+    TraceLog => $setup->{log_file},
+    Trace => 'prometheus:20 prometheus.db:20 prometheus.http:20 prometheus.http.clf:10 prometheus.metric:20 prometheus.metric.db:20',
+
+    AuthUserFile => $setup->{auth_user_file},
+    AuthGroupFile => $setup->{auth_group_file},
+
+    IfModules => {
+      'mod_delay.c' => {
+        DelayEngine => 'off',
+      },
+
+      'mod_prometheus.c' => {
+        PrometheusEngine => 'on',
+        PrometheusLog => $setup->{log_file},
+        PrometheusTables => $table_dir,
+        PrometheusExporter => "127.0.0.1:$exporter_port",
+      },
+    },
+  };
+
+  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
+    $config);
+
+  # Open pipes, for use between the parent and child processes.  Specifically,
+  # the child will indicate when it's done with its test by writing a message
+  # to the parent.
+  my ($rfh, $wfh);
+  unless (pipe($rfh, $wfh)) {
+    die("Can't open pipe: $!");
+  }
+
+  require LWP::UserAgent;
+
+  my $ex;
+
+  # Fork child
+  $self->handle_sigchld();
+  defined(my $pid = fork()) or die("Can't fork: $!");
+  if ($pid) {
+    eval {
+      # Allow server to start up
+      sleep(2);
+
+      my $ua = LWP::UserAgent->new();
+      $ua->timeout(3);
+      $ua->default_header('Accept-Encoding' => 'deflate,gzip,foobar');
+
+      my $url = "http://127.0.0.1:$exporter_port/metrics";
+      my $resp = $ua->get($url);
+
+      if ($ENV{TEST_VERBOSE}) {
+        print STDERR "# response: ", $resp->status_line, "\n";
+        print STDERR "#   ", $resp->decoded_content, "\n";
+      }
+
+      my $expected = 200;
+      my $resp_code = $resp->code;
+      $self->assert($expected == $resp_code,
+        test_msg("Expected response code $expected, got $resp_code"));
+
+      $expected = 'OK';
+      my $resp_msg = $resp->message;
+      $self->assert($expected eq $resp_msg,
+        test_msg("Expected response message '$expected', got '$resp_msg'"));
+
+      my $headers = $resp->headers;
+      my $content_type = $headers->header('Content-Type');
+      $expected = 'text/plain';
+      $self->assert($expected eq $content_type,
+        test_msg("Expected Content-Type '$expected', got '$content_type'"));
+
+      my $content_encoding = $headers->header('Content-Encoding');
+      $expected = 'gzip';
+      $self->assert($expected eq $content_encoding,
+        test_msg("Expected Content-Encoding '$expected', got '$content_encoding'"));
+
+      my $content = $resp->decoded_content;
+      my $lines = [split(/\n/, $content)];
+
+      $expected = '^# HELP proftpd_build_info .*?\.$';
+      my $seen = saw_expected_content($lines, $expected);
+      $self->assert($seen,
+        test_msg("Did not see '$expected' in '$content' as expected"));
     };
     if ($@) {
       $ex = $@;
@@ -1668,7 +1794,7 @@ sub prom_scrape_metric_connection {
 
       my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
       $client->login($setup->{user}, $setup->{passwd});
-      sleep(1);
+      sleep(2);
       $client->quit();
 
       my $ua = LWP::UserAgent->new();
