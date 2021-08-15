@@ -25,6 +25,32 @@
 #include "mod_prometheus.h"
 #include "prometheus/http.h"
 
+#if defined(HAVE_ZLIB_H)
+# include <zlib.h>
+
+/* RFC 1952 Section 2.3 defines the gzip header:
+ *
+ * +---+---+---+---+---+---+---+---+---+---+
+ * |ID1|ID2|CM |FLG|     MTIME     |XFL|OS |
+ * +---+---+---+---+---+---+---+---+---+---+
+ */
+static gz_header gzip_header = {
+  TRUE, 					/* is text? */
+  0,    					/* modification time */
+  0,    					/* flags */
+  0,    					/* os */
+  NULL, 					/* extra */
+  0,
+  0,
+  NULL, 					/* name */
+  0,
+  (unsigned char *) MOD_PROMETHEUS_VERSION,	/* comment */
+  0,
+  TRUE,						/* header CRC */
+  0
+};
+#endif /* HAVE_ZLIB_H */
+
 /* Per libmicrohttpd docs, we should define this after we have our system
  * headers, but before including `microhttpd.h`.
  */
@@ -69,6 +95,152 @@ static void panic_cb(void *user_data, const char *file, unsigned int lineno,
     const char *reason) {
   (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
     "microhttpd panic: [%s:%u] %s", file, lineno, reason);
+}
+
+static int can_gzip(struct MHD_Connection *conn) {
+#if defined(HAVE_ZLIB_H)
+  const char *accept_encoding, *gzip_encoding = NULL;
+
+  accept_encoding = MHD_lookup_connection_value(conn, MHD_HEADER_KIND,
+    MHD_HTTP_HEADER_ACCEPT_ENCODING);
+  if (accept_encoding == NULL) {
+    return FALSE;
+  }
+
+  pr_trace_msg(trace_channel, 19, "found Accept-Encoding request header: '%s'",
+    accept_encoding);
+
+  if (strcmp(accept_encoding, "*") == 0) {
+    return TRUE;
+  }
+
+  gzip_encoding = strstr(accept_encoding, "gzip");
+  if (gzip_encoding == NULL) {
+    return FALSE;
+  }
+
+  if ((gzip_encoding == accept_encoding ||
+       gzip_encoding[-1] == ',' ||
+       gzip_encoding[-1] == ' ') &&
+      (gzip_encoding[4] == '\0' ||
+       gzip_encoding[4] == ',' ||
+       gzip_encoding[4] == ';')) {
+    return TRUE;
+  }
+#endif /* HAVE_ZLIB_H */
+
+  return FALSE;
+}
+
+#if defined(HAVE_ZLIB_H)
+static const char *zlib_strerror(int zerrno) {
+  const char *zstr = "unknown";
+
+  switch (zerrno) {
+    case Z_OK:
+      zstr = "OK";
+      break;
+
+    case Z_STREAM_END:
+      return "End of stream";
+      break;
+
+    case Z_STREAM_ERROR:
+      return "Stream error";
+      break;
+
+    case Z_NEED_DICT:
+      return "Need dictionary";
+      break;
+
+    case Z_ERRNO:
+      zstr = strerror(errno);
+      break;
+
+    case Z_DATA_ERROR:
+      zstr = "Data error";
+      break;
+
+    case Z_MEM_ERROR:
+      zstr = "Memory error";
+      break;
+
+    case Z_BUF_ERROR:
+      zstr = "Buffer error";
+      break;
+
+    case Z_VERSION_ERROR:
+      zstr = "Version error";
+      break;
+  }
+
+  return zstr;
+}
+#endif /* HAVE_ZLIB_H */
+
+static const char *gzip_text(pool *p, const char *text, size_t text_len,
+    size_t *gzipped_textlen) {
+#if defined(HAVE_ZLIB_H)
+  int res;
+  z_stream *zstrm;
+  unsigned char *output_buf = NULL;
+  const char *gzipped_text = NULL;
+
+  zstrm = pcalloc(p, sizeof(z_stream));
+  zstrm->zalloc = Z_NULL;
+  zstrm->zfree = Z_NULL;
+  zstrm->opaque = Z_NULL;
+
+  zstrm->next_in = (Bytef *) text;
+  zstrm->avail_in = zstrm->total_in = text_len;
+
+  /* It's possible that it may require more room to compress the given
+   * text, especially if it's small.  Be prepared.
+   */
+  zstrm->avail_out = zstrm->total_out = (text_len * 3);
+  zstrm->next_out = output_buf = pcalloc(p, zstrm->avail_out);
+
+  /* Note that it is IMPORTANT that the `windowBits` value be 31 or more here,
+   * to indicate to zlib that it should add a gzip header.  Subtle magic.
+   */
+  res = deflateInit2(zstrm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8,
+    Z_DEFAULT_STRATEGY);
+  if (res != Z_OK) {
+    deflateEnd(zstrm);
+    pr_trace_msg(trace_channel, 1,
+      "error initializing zlib for deflation: %s (%d)",
+      zstrm->msg ? zstrm->msg : zlib_strerror(res), res);
+    return NULL;
+  }
+
+  res = deflateSetHeader(zstrm, &gzip_header);
+  if (res != Z_OK) {
+    deflateEnd(zstrm);
+    pr_trace_msg(trace_channel, 1, "error setting gzip header: %s (%d)",
+      zstrm->msg ? zstrm->msg : zlib_strerror(res), res);
+    return NULL;
+  }
+
+  res = deflate(zstrm, Z_FINISH);
+  if (res != Z_STREAM_END) {
+    deflateEnd(zstrm);
+    pr_trace_msg(trace_channel, 1, "error compressing data: %s",
+      zstrm->msg ? zstrm->msg : zlib_strerror(res));
+    return NULL;
+  }
+
+  pr_trace_msg(trace_channel, 19, "available compressed text: %lu bytes",
+    (unsigned long) zstrm->total_out);
+  *gzipped_textlen = zstrm->total_out;
+  gzipped_text = pcalloc(p, *gzipped_textlen);
+  memcpy((char *) gzipped_text, output_buf, *gzipped_textlen);
+
+  deflateEnd(zstrm);
+  return gzipped_text;
+#endif /* HAVE_ZLIB_H */
+
+  errno = ENOSYS;
+  return NULL;
 }
 
 static const char *get_ip_text(pool *p, const struct sockaddr *sa) {
@@ -200,7 +372,7 @@ static enum MHD_Result handle_request_cb(void *user_data,
   }
 
   if (strcmp(http_uri, "/metrics") == 0) {
-    int xerrno;
+    int xerrno, use_gzip = FALSE;
     char *request_username = NULL;
 
     if (http_username != NULL) {
@@ -320,15 +492,43 @@ static enum MHD_Result handle_request_cb(void *user_data,
       return res;
     }
 
-    status_code = MHD_HTTP_OK;
     textlen = strlen(text);
-    pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen,
-      text);
+    status_code = MHD_HTTP_OK;
+
+    use_gzip = can_gzip(conn);
+    if (use_gzip == TRUE) {
+      const char *gzipped_text = NULL;
+      size_t gzipped_textlen = 0;
+
+      pr_trace_msg(trace_channel, 12,
+        "client indicates support for gzip-compressed content, "
+        "attempting to compress text (%lu bytes):\n%.*s",
+        (unsigned long) textlen, (int) textlen, text);
+      gzipped_text = gzip_text(resp_pool, text, textlen, &gzipped_textlen);
+      if (gzipped_text != NULL) {
+        text = gzipped_text;
+        textlen = gzipped_textlen;
+        pr_trace_msg(trace_channel, 19,
+          "registry text:\n(gzip compressed, %lu bytes)", (size_t) textlen);
+
+      } else {
+        use_gzip = FALSE;
+      }
+
+    } else {
+      pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen,
+        text);
+    }
 
     resp = MHD_create_response_from_buffer(textlen, (void *) text,
       MHD_RESPMEM_MUST_COPY);
     (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
       "text/plain");
+    if (use_gzip == TRUE) {
+      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_ENCODING,
+        "gzip");
+    }
+
     res = MHD_queue_response(conn, status_code, resp);
     MHD_destroy_response(resp);
 

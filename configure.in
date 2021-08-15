@@ -128,9 +128,34 @@ AC_TRY_LINK([
 )
 LIBS="$saved_libs"
 
+ac_compression_libs=''
+saved_libs="$LIBS"
+LIBS="$LIBS -lz"
+AC_MSG_CHECKING([for gzip in libz])
+AC_TRY_LINK(
+  [ #include <stdlib.h>
+    #include <sys/types.h>
+    #ifdef HAVE_ZLIB_H
+    # include <zlib.h>
+    #endif
+  ],
+  [
+    int res;
+    res = deflateSetHeader(NULL, NULL);
+  ],
+  [
+    AC_MSG_RESULT(yes)
+    ac_compression_libs="-lz"
+  ],
+  [
+    AC_MSG_RESULT(no)
+  ]
+)
+LIBS="$saved_libs"
+
 INCLUDES="$ac_build_addl_includes"
 LIBDIRS="$ac_build_addl_libdirs"
-MODULE_LIBS="$ac_dns_libs"
+MODULE_LIBS="$ac_compression_libs"
 
 AC_SUBST(INCLUDES)
 AC_SUBST(LDFLAGS)
