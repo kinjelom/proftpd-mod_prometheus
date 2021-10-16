@@ -85,7 +85,7 @@ jobs:
           # for SQLite support
           yum install -y sqlite-devel
           # for OpenSSL support
-          yum install -y openssl-devel
+          yum install -y openssl openssl-devel
           # for zlib support
           yum install -y zlib-devel
 
