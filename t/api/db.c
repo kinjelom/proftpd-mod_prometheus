@@ -873,6 +873,84 @@ START_TEST (db_last_row_id_test) {
 }
 END_TEST
 
+START_TEST (db_begin_txn_test) {
+  int res;
+  const char *table_path, *schema_name;
+  struct prom_dbh *dbh;
+
+  mark_point();
+  res = prom_db_begin_txn(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_db_begin_txn(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null dbh");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
+    strerror(errno), errno);
+
+  (void) unlink(db_test_table);
+  table_path = db_test_table;
+  schema_name = "prometheus_test";
+
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
+  fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
+    strerror(errno));
+
+  mark_point();
+  res = prom_db_begin_txn(p, dbh, NULL);
+  fail_unless(res == 0, "Failed to begin transaction");
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  (void) unlink(db_test_table);
+}
+END_TEST
+
+START_TEST (db_commit_txn_test) {
+  int res;
+  const char *table_path, *schema_name;
+  struct prom_dbh *dbh;
+
+  mark_point();
+  res = prom_db_commit_txn(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = prom_db_commit_txn(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null dbh");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got '%s' (%d)", EINVAL,
+    strerror(errno), errno);
+
+  (void) unlink(db_test_table);
+  table_path = db_test_table;
+  schema_name = "prometheus_test";
+
+  mark_point();
+  dbh = prom_db_open(p, table_path, schema_name);
+  fail_unless(dbh != NULL, "Failed to open table '%s': %s", table_path,
+    strerror(errno));
+
+  mark_point();
+  res = prom_db_begin_txn(p, dbh, NULL);
+  fail_unless(res == 0, "Failed to begin transaction");
+
+  mark_point();
+  res = prom_db_commit_txn(p, dbh, NULL);
+  fail_unless(res == 0, "Failed to commit transaction");
+
+  res = prom_db_close(p, dbh);
+  fail_unless(res == 0, "Failed to close database: %s", strerror(errno));
+
+  (void) unlink(db_test_table);
+}
+END_TEST
+
 Suite *tests_get_db_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -894,6 +972,8 @@ Suite *tests_get_db_suite(void) {
   tcase_add_test(testcase, db_exec_prepared_stmt_test);
   tcase_add_test(testcase, db_reindex_test);
   tcase_add_test(testcase, db_last_row_id_test);
+  tcase_add_test(testcase, db_begin_txn_test);
+  tcase_add_test(testcase, db_commit_txn_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
