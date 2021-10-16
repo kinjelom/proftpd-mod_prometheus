@@ -713,6 +713,15 @@ static struct prom_dbh *db_open(pool *p, const char *table_path,
       table_path, sqlite3_errmsg(dbh->db));
   }
 
+  /* Tell SQLite to rely on OS-level write semantics. */
+  stmt = "PRAGMA synchronous = OFF;";
+  res = prom_db_exec_stmt(p, dbh, stmt, NULL);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2,
+      "error setting SYNCHRONOUS pragma on SQLite database '%s': %s",
+      table_path, sqlite3_errmsg(dbh->db));
+  }
+
   dbh->prepared_stmts = pr_table_nalloc(dbh->pool, 0, 4);
   pr_trace_msg(trace_channel, 9, "opened SQLite table '%s'", table_path);
 
