@@ -1796,6 +1796,7 @@ sub prom_scrape_metric_connection {
       $client->login($setup->{user}, $setup->{passwd});
       sleep(2);
       $client->quit();
+      sleep(1);
 
       my $ua = LWP::UserAgent->new();
       $ua->timeout(3);
