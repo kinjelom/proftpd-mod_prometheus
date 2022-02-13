@@ -82,7 +82,7 @@ jobs:
           # for unit tests
           yum install -y check-devel https://cbs.centos.org/kojifiles/packages/subunit/1.4.0/1.el8/x86_64/subunit-1.4.0-1.el8.x86_64.rpm https://cbs.centos.org/kojifiles/packages/subunit/1.4.0/1.el8/x86_64/subunit-devel-1.4.0-1.el8.x86_64.rpm
           # for libmicrohttpd support
-          yum install -y http://fr2.rpmfind.net/linux/centos/8-stream/BaseOS/x86_64/os/Packages/libmicrohttpd-0.9.59-2.el8.x86_64.rpm
+          yum install -y http://fr2.rpmfind.net/linux/centos/8-stream/PowerTools/x86_64/os/Packages/libmicrohttpd-devel-0.9.59-2.el8.x86_64.rpm
           # for SQLite support
           yum install -y sqlite-devel
           # for OpenSSL support
