@@ -78,11 +78,13 @@ jobs:
         if: ${{ matrix.container == 'almalinux:8' }}
         run: |
           # Need to add other repos for e.g. libsodium
-          yum install -y dnf-plugins-core epel-release clang gcc make zlib-devel
+          yum install -y dnf-plugins-core epel-release yum-utils clang gcc make zlib-devel
+          dnf config-manager --enable epel
+          dnf config-manager --set-enabled powertools
           # for unit tests
           yum install -y check-devel https://cbs.centos.org/kojifiles/packages/subunit/1.4.0/1.el8/x86_64/subunit-1.4.0-1.el8.x86_64.rpm https://cbs.centos.org/kojifiles/packages/subunit/1.4.0/1.el8/x86_64/subunit-devel-1.4.0-1.el8.x86_64.rpm
           # for libmicrohttpd support
-          yum install -y http://fr2.rpmfind.net/linux/centos/8-stream/PowerTools/x86_64/os/Packages/libmicrohttpd-devel-0.9.59-2.el8.x86_64.rpm
+          yum install -y libmicrohttpd-devel
           # for SQLite support
           yum install -y sqlite-devel
           # for OpenSSL support
