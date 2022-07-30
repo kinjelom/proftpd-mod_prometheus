@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,13 +61,13 @@ START_TEST (http_init_test) {
 
   mark_point();
   res = prom_http_init(NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_http_init(p);
-  fail_unless(res == 0, "Failed to init HTTP API: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to init HTTP API: %s", strerror(errno));
 }
 END_TEST
 
@@ -76,7 +76,7 @@ START_TEST (http_free_test) {
 
   mark_point();
   res = prom_http_free();
-  fail_unless(res == 0, "Failed to free HTTP API: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free HTTP API: %s", strerror(errno));
 }
 END_TEST
 
@@ -85,14 +85,14 @@ START_TEST (http_stop_test) {
 
   mark_point();
   res = prom_http_stop(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_http_stop(p, NULL);
-  fail_unless(res < 0, "Failed to handle null http");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null http");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -105,14 +105,14 @@ START_TEST (http_start_test) {
 
   mark_point();
   http = prom_http_start(NULL, NULL, NULL, NULL, NULL);
-  fail_unless(http == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(http == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   http = prom_http_start(p, NULL, NULL, NULL, NULL);
-  fail_unless(http == NULL, "Failed to handle null addr");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(http == NULL, "Failed to handle null addr");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
@@ -122,8 +122,8 @@ START_TEST (http_start_test) {
   pr_netaddr_set_port2(addr, 0);
 
   http = prom_http_start(p, addr, NULL, NULL, NULL);
-  fail_unless(http == NULL, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(http == NULL, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
@@ -131,11 +131,11 @@ START_TEST (http_start_test) {
   /* Note: We don't need a real registry here, just a non-null pointer. */
   registry = pcalloc(p, 8);
   http = prom_http_start(p, addr, registry, NULL, NULL);
-  fail_unless(http != NULL, "Failed to start http: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to start http: %s", strerror(errno));
 
   mark_point();
   res = prom_http_stop(p, http);
-  fail_unless(res == 0, "Failed to stop http: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to stop http: %s", strerror(errno));
 }
 END_TEST
 
@@ -144,14 +144,14 @@ START_TEST (http_run_loop_test) {
 
   mark_point();
   res = prom_http_run_loop(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_http_run_loop(p, NULL);
-  fail_unless(res < 0, "Failed to handle null http");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null http");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST

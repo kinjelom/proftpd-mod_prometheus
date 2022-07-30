@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,11 +46,11 @@ int tests_mkpath(pool *p, const char *path) {
 
   perms = 0770;
   res = mkdir(path, perms);
-  fail_unless(res == 0, "Failed to create tmp directory '%s': %s", path,
+  ck_assert_msg(res == 0, "Failed to create tmp directory '%s': %s", path,
     strerror(errno));
 
   res = chmod(path, perms);
-  fail_unless(res == 0, "Failed to set perms %04o on directory '%s': %s",
+  ck_assert_msg(res == 0, "Failed to set perms %04o on directory '%s': %s",
     perms, path, strerror(errno));
 
   return 0;

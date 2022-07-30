@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,8 +57,8 @@ START_TEST (text_destroy_test) {
 
   mark_point();
   res = prom_text_destroy(NULL);
-  fail_unless(res < 0, "Failed to handle null text");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null text");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -69,16 +69,16 @@ START_TEST (text_create_test) {
 
   mark_point();
   text = prom_text_create(NULL);
-  fail_unless(text == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(text == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_text_create(p);
-  fail_unless(text != NULL, "Failed to create text: %s", strerror(errno));
+  ck_assert_msg(text != NULL, "Failed to create text: %s", strerror(errno));
 
   res = prom_text_destroy(text);
-  fail_unless(res == 0, "Failed to destroy text: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy text: %s", strerror(errno));
 }
 END_TEST
 
@@ -88,21 +88,21 @@ START_TEST (text_get_str_test) {
 
   mark_point();
   res = prom_text_get_str(NULL, NULL, NULL);
-  fail_unless(res == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_text_get_str(p, NULL, NULL);
-  fail_unless(res == NULL, "Failed to handle null text");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null text");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_text_create(p);
   res = prom_text_get_str(p, text, NULL);
-  fail_unless(res == NULL, "Failed to handle absent text");
-  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+  ck_assert_msg(res == NULL, "Failed to handle absent text");
+  ck_assert_msg(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
   prom_text_destroy(text);
@@ -117,19 +117,19 @@ START_TEST (text_add_byte_test) {
 
   mark_point();
   res = prom_text_add_byte(NULL, '"');
-  fail_unless(res < 0, "Failed to handle null text");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null text");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_text_create(p);
   res = prom_text_add_byte(text, '{');
-  fail_unless(res == 0, "Failed to add byte: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add byte: %s", strerror(errno));
 
   str = prom_text_get_str(p, text, &sz);
-  fail_unless(str != NULL, "Failed get text: %s", strerror(errno));
-  fail_unless(sz == 1, "Expected size 1, got %lu", (unsigned long) sz);
-  fail_unless(strcmp(str, "{") == 0, "Expected '{', got '%s'", str);
+  ck_assert_msg(str != NULL, "Failed get text: %s", strerror(errno));
+  ck_assert_msg(sz == 1, "Expected size 1, got %lu", (unsigned long) sz);
+  ck_assert_msg(strcmp(str, "{") == 0, "Expected '{', got '%s'", str);
 
   prom_text_destroy(text);
 }
@@ -143,36 +143,36 @@ START_TEST (text_add_str_test) {
 
   mark_point();
   res = prom_text_add_str(NULL, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null text");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null text");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_text_create(p);
   res = prom_text_add_str(text, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null str");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null str");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   input = "foobar";
   res = prom_text_add_str(text, input, 0);
-  fail_unless(res == 0, "Failed to handle zero-length text: %s",
+  ck_assert_msg(res == 0, "Failed to handle zero-length text: %s",
     strerror(errno));
 
   str = prom_text_get_str(p, text, NULL);
-  fail_unless(str == NULL, "Failed to handle absent text");
-  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+  ck_assert_msg(str == NULL, "Failed to handle absent text");
+  ck_assert_msg(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
   mark_point();
   res = prom_text_add_str(text, input, strlen(input));
-  fail_unless(res == 0, "Failed to handle text: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to handle text: %s", strerror(errno));
 
   str = prom_text_get_str(p, text, &sz);
-  fail_unless(str != NULL, "Failed get text: %s", strerror(errno));
-  fail_unless(sz == 6, "Expected size 7, got %lu", (unsigned long) sz);
-  fail_unless(strcmp(str, input) == 0,
+  ck_assert_msg(str != NULL, "Failed get text: %s", strerror(errno));
+  ck_assert_msg(sz == 6, "Expected size 7, got %lu", (unsigned long) sz);
+  ck_assert_msg(strcmp(str, input) == 0,
     "Expected '%s', got '%s'", input, str);
 
   prom_text_destroy(text);
@@ -186,39 +186,39 @@ START_TEST (text_from_labels_test) {
 
   mark_point();
   res = prom_text_from_labels(NULL, NULL, NULL);
-  fail_unless(res == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_text_from_labels(p, NULL, NULL);
-  fail_unless(res == NULL, "Failed to handle null text");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null text");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_text_create(p);
   res = prom_text_from_labels(p, text, NULL);
-  fail_unless(res != NULL, "Failed to handle null labels: %s",
+  ck_assert_msg(res != NULL, "Failed to handle null labels: %s",
     strerror(errno));
-  fail_unless(strcmp(res, "") == 0, "Expected '', got '%s'", res);
+  ck_assert_msg(strcmp(res, "") == 0, "Expected '', got '%s'", res);
 
   /* Now, with labels. */
   mark_point();
   labels = pr_table_nalloc(p, 0, 2);
   res = prom_text_from_labels(p, text, labels);
-  fail_unless(res != NULL, "Failed to handle empty labels: %s",
+  ck_assert_msg(res != NULL, "Failed to handle empty labels: %s",
     strerror(errno));
-  fail_unless(strcmp(res, "") == 0, "Expected '', got '%s'", res);
+  ck_assert_msg(strcmp(res, "") == 0, "Expected '', got '%s'", res);
 
   mark_point();
   (void) pr_table_add_dup(labels, "protocol", "ftp", 0);
   (void) pr_table_add_dup(labels, "foo", "BAR", 0);
   res = prom_text_from_labels(p, text, labels);
-  fail_unless(res != NULL, "Failed to handle labels: %s", strerror(errno));
+  ck_assert_msg(res != NULL, "Failed to handle labels: %s", strerror(errno));
 
   expected = "{foo=\"BAR\",protocol=\"ftp\"}";
-  fail_unless(strcmp(res, expected) == 0,
+  ck_assert_msg(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 
   prom_text_destroy(text);
