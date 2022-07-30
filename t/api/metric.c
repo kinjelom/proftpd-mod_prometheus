@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -70,13 +70,13 @@ START_TEST (metric_free_test) {
 
   mark_point();
   res = prom_metric_free(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_free(p, NULL);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
 }
 END_TEST
 
@@ -89,22 +89,22 @@ START_TEST (metric_init_test) {
 
   mark_point();
   dbh = prom_metric_init(NULL, NULL);
-  fail_unless(dbh == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(dbh == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, NULL);
-  fail_unless(dbh == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(dbh == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -114,14 +114,14 @@ START_TEST (metric_destroy_test) {
 
   mark_point();
   res = prom_metric_destroy(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_destroy(p, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -137,43 +137,43 @@ START_TEST (metric_create_test) {
 
   mark_point();
   metric = prom_metric_create(NULL, NULL, NULL);
-  fail_unless(metric == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(metric == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   metric = prom_metric_create(p, NULL, NULL);
-  fail_unless(metric == NULL, "Failed to handle null name");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(metric == NULL, "Failed to handle null name");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, NULL);
-  fail_unless(metric == NULL, "Failed to handle null dbh");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(metric == NULL, "Failed to handle null dbh");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   expected = "test";
-  fail_unless(strcmp(prom_metric_get_name(metric), expected) == 0,
+  ck_assert_msg(strcmp(prom_metric_get_name(metric), expected) == 0,
     "Expected metric name '%s', got '%s'", expected,
     prom_metric_get_name(metric));
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -189,36 +189,36 @@ START_TEST (metric_add_counter_test) {
 
   mark_point();
   res = prom_metric_add_counter(NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_counter(metric, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null help");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null help");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   suffix = "total";
   res = prom_metric_add_counter(metric, suffix, "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -234,36 +234,36 @@ START_TEST (metric_add_gauge_test) {
 
   mark_point();
   res = prom_metric_add_gauge(NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_gauge(metric, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null help");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null help");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   suffix = "count";
   res = prom_metric_add_gauge(metric, suffix, "testing");
-  fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -279,37 +279,37 @@ START_TEST (metric_add_histogram_test) {
 
   mark_point();
   res = prom_metric_add_histogram(NULL, NULL, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_histogram(metric, NULL, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null help");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null help");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   suffix = "weight";
   res = prom_metric_add_histogram(metric, suffix, "testing", 0);
-  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+  ck_assert_msg(res == 0, "Failed to add histogram to metric: %s",
     strerror(errno));
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -321,25 +321,25 @@ START_TEST (metric_set_dbh_test) {
 
   mark_point();
   res = prom_metric_set_dbh(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* For purposes of testing, this does not have to be a real dbh. */
   mark_point();
   dbh = palloc(p, 8);
   metric = prom_metric_create(p, "test", dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_set_dbh(metric, NULL);
-  fail_unless(res < 0, "Failed to handle null dbh");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null dbh");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_set_dbh(metric, dbh);
-  fail_unless(res == 0, "Failed to set dbh: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set dbh: %s", strerror(errno));
 
   prom_metric_destroy(p, metric);
 }
@@ -357,55 +357,55 @@ START_TEST (metric_get_test) {
 
   mark_point();
   results = prom_metric_get(NULL, NULL, 0, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(results == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   results = prom_metric_get(p, NULL, 0, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(results == NULL, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, -1, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle unknown metric type");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(results == NULL, "Failed to handle unknown metric type");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle counter-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(results == NULL, "Failed to handle counter-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle gauge-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(results == NULL, "Failed to handle gauge-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, NULL, NULL);
-  fail_unless(results == NULL, "Failed to handle histogram-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(results == NULL, "Failed to handle histogram-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -424,44 +424,44 @@ START_TEST (metric_decr_test) {
 
   mark_point();
   res = prom_metric_decr(NULL, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_decr(p, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_decr(p, metric, decr_val, NULL);
-  fail_unless(res < 0, "Failed to handle gauge-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle gauge-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_add_gauge(metric, "count", "testing");
-  fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_decr(p, metric, decr_val, NULL);
-  fail_unless(res == 0, "Failed to decrement metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to decrement metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   /* Now, provide labels. */
@@ -471,21 +471,21 @@ START_TEST (metric_decr_test) {
 
   mark_point();
   res = prom_metric_decr(p, metric, decr_val, labels);
-  fail_unless(res == 0, "Failed to decrement metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to decrement metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -504,59 +504,59 @@ START_TEST (metric_incr_type_test) {
 
   mark_point();
   res = prom_metric_incr_type(NULL, NULL, 0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_incr_type(p, NULL, 0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr_type(p, metric, incr_val, NULL, 0);
-  fail_unless(res < 0, "Failed to handle unknown metric type");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle unknown metric type");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_incr_type(p, metric, incr_val, NULL,
     PROM_METRIC_TYPE_COUNTER);
-  fail_unless(res < 0, "Failed to handle counter-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle counter-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_incr_type(p, metric, incr_val, NULL,
     PROM_METRIC_TYPE_GAUGE);
-  fail_unless(res < 0, "Failed to handle gauge-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle gauge-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr_type(p, metric, incr_val, NULL,
     PROM_METRIC_TYPE_COUNTER);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   /* Now, provide labels. */
@@ -567,21 +567,21 @@ START_TEST (metric_incr_type_test) {
   mark_point();
   res = prom_metric_incr_type(p, metric, incr_val, labels,
     PROM_METRIC_TYPE_COUNTER);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -600,44 +600,44 @@ START_TEST (metric_incr_test) {
 
   mark_point();
   res = prom_metric_incr(NULL, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_incr(p, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, incr_val, NULL);
-  fail_unless(res < 0, "Failed to handle counter-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle counter-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, incr_val, NULL);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   /* Now, provide labels. */
@@ -647,21 +647,21 @@ START_TEST (metric_incr_test) {
 
   mark_point();
   res = prom_metric_incr(p, metric, incr_val, labels);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -680,35 +680,35 @@ START_TEST (metric_incr_counter_gauge_test) {
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   res = prom_metric_add_gauge(metric, "count", "testing");
-  fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, incr_val, NULL);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   /* Now, provide labels. */
@@ -718,27 +718,27 @@ START_TEST (metric_incr_counter_gauge_test) {
 
   mark_point();
   res = prom_metric_incr(p, metric, incr_val, labels);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_COUNTER, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled counter samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled counter samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -757,54 +757,54 @@ START_TEST (metric_observe_test) {
 
   mark_point();
   res = prom_metric_observe(NULL, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_observe(p, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_observe(p, metric, observed_val, NULL);
-  fail_unless(res < 0, "Failed to handle histogram-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle histogram-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_add_histogram(metric, "units", "testing", 0);
-  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+  ck_assert_msg(res == 0, "Failed to add histogram to metric: %s",
     strerror(errno));
 
   mark_point();
   res = prom_metric_observe(p, metric, observed_val, NULL);
-  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, &counts,
     &sums);
-  fail_unless(results != NULL, "Failed get histogram results: %s",
+  ck_assert_msg(results != NULL, "Failed get histogram results: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 bucket results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 bucket results, got %d",
     results->nelts);
-  fail_unless(counts != NULL, "Failed get histogram count results: %s",
+  ck_assert_msg(counts != NULL, "Failed get histogram count results: %s",
     strerror(errno));
-  fail_unless(counts->nelts == 2, "Expected 2 count results, got %d",
+  ck_assert_msg(counts->nelts == 2, "Expected 2 count results, got %d",
     counts->nelts);
-  fail_unless(sums != NULL, "Failed get histogram sum results: %s",
+  ck_assert_msg(sums != NULL, "Failed get histogram sum results: %s",
     strerror(errno));
-  fail_unless(sums->nelts == 2, "Expected 2 sum results, got %d",
+  ck_assert_msg(sums->nelts == 2, "Expected 2 sum results, got %d",
     sums->nelts);
 
   /* Now, provide labels. */
@@ -814,31 +814,31 @@ START_TEST (metric_observe_test) {
 
   mark_point();
   res = prom_metric_observe(p, metric, observed_val, labels);
-  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
   counts = sums = NULL;
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_HISTOGRAM, &counts,
     &sums);
-  fail_unless(results != NULL, "Failed to get histogram results: %s",
+  ck_assert_msg(results != NULL, "Failed to get histogram results: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 bucket results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 bucket results, got %d",
     results->nelts);
-  fail_unless(counts != NULL, "Failed to get histogram count results: %s",
+  ck_assert_msg(counts != NULL, "Failed to get histogram count results: %s",
     strerror(errno));
-  fail_unless(counts->nelts == 4, "Expected 4 count results, got %d",
+  ck_assert_msg(counts->nelts == 4, "Expected 4 count results, got %d",
     counts->nelts);
-  fail_unless(sums != NULL, "Failed to get histogram sum results: %s",
+  ck_assert_msg(sums != NULL, "Failed to get histogram sum results: %s",
     strerror(errno));
-  fail_unless(sums->nelts == 4, "Expected 4 sum results, got %d",
+  ck_assert_msg(sums->nelts == 4, "Expected 4 sum results, got %d",
     sums->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -857,44 +857,44 @@ START_TEST (metric_set_test) {
 
   mark_point();
   res = prom_metric_set(NULL, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_set(p, NULL, 0, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_set(p, metric, set_val, NULL);
-  fail_unless(res < 0, "Failed to handle gauge-less metric");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Failed to handle gauge-less metric");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   mark_point();
   res = prom_metric_add_gauge(metric, "count", "testing");
-  fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_set(p, metric, set_val, NULL);
-  fail_unless(res == 0, "Failed to set metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get label-less gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get label-less gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 2, "Expected 2 results, got %d",
+  ck_assert_msg(results->nelts == 2, "Expected 2 results, got %d",
     results->nelts);
 
   /* Now, provide labels. */
@@ -904,21 +904,21 @@ START_TEST (metric_set_test) {
 
   mark_point();
   res = prom_metric_set(p, metric, set_val, labels);
-  fail_unless(res == 0, "Failed to set metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set metric: %s", strerror(errno));
 
   mark_point();
   results = prom_metric_get(p, metric, PROM_METRIC_TYPE_GAUGE, NULL, NULL);
-  fail_unless(results != NULL, "Failed to get labeled gauge samples: %s",
+  ck_assert_msg(results != NULL, "Failed to get labeled gauge samples: %s",
     strerror(errno));
-  fail_unless(results->nelts == 4, "Expected 4 results, got %d",
+  ck_assert_msg(results->nelts == 4, "Expected 4 results, got %d",
     results->nelts);
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST
@@ -936,29 +936,29 @@ START_TEST (metric_get_text_test) {
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   name = "test";
   metric = prom_metric_create(p, name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "counter testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_gauge(metric, "count", "gauge testing");
-  fail_unless(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add gauge to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_histogram(metric, "weight", "histogram testing", 0);
-  fail_unless(res == 0, "Failed to add histogram to metric: %s",
+  ck_assert_msg(res == 0, "Failed to add histogram to metric: %s",
     strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, 6, NULL);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   /* Now, provide labels. */
   labels = pr_table_nalloc(p, 0, 2);
@@ -967,59 +967,59 @@ START_TEST (metric_get_text_test) {
 
   mark_point();
   res = prom_metric_incr(p, metric, 8, labels);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_observe(p, metric, 76.42, labels);
-  fail_unless(res == 0, "Failed to observe metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to observe metric: %s", strerror(errno));
 
   mark_point();
   text = prom_metric_get_text(p, metric, "prt", &textlen);
-  fail_unless(text != NULL, "Failed to get metric text: %s", strerror(errno));
-  fail_unless(textlen > 0, "Expected text data, got %lu",
+  ck_assert_msg(text != NULL, "Failed to get metric text: %s", strerror(errno));
+  ck_assert_msg(textlen > 0, "Expected text data, got %lu",
     (unsigned long) textlen);
 
   /* Use strstr(3) to assert bits of text. */
-  fail_unless(strstr(text, "# HELP prt_test_total") != NULL,
+  ck_assert_msg(strstr(text, "# HELP prt_test_total") != NULL,
     "Expected counter HELP text");
-  fail_unless(strstr(text, "# TYPE prt_test_total counter") != NULL,
+  ck_assert_msg(strstr(text, "# TYPE prt_test_total counter") != NULL,
     "Expected counter TYPE text");
-  fail_unless(strstr(text, "prt_test_total 6") != NULL,
+  ck_assert_msg(strstr(text, "prt_test_total 6") != NULL,
     "Expected label-less counter sample");
-  fail_unless(
+  ck_assert_msg(
     strstr(text, "prt_test_total{foo=\"BAR\",protocol=\"ftp\"} 8") != NULL,
     "Expected labeled counter sample");
 
-  fail_unless(strstr(text, "# HELP prt_test_count") != NULL,
+  ck_assert_msg(strstr(text, "# HELP prt_test_count") != NULL,
     "Expected gauge HELP text");
-  fail_unless(strstr(text, "# TYPE prt_test_count gauge") != NULL,
+  ck_assert_msg(strstr(text, "# TYPE prt_test_count gauge") != NULL,
     "Expected gauge TYPE text");
-  fail_unless(strstr(text, "prt_test_count 6") != NULL,
+  ck_assert_msg(strstr(text, "prt_test_count 6") != NULL,
     "Expected label-less gauge sample");
-  fail_unless(
+  ck_assert_msg(
     strstr(text, "prt_test_count{foo=\"BAR\",protocol=\"ftp\"} 8") != NULL,
     "Expected labeled gauge sample");
 
-  fail_unless(strstr(text, "# HELP prt_test_weight") != NULL,
+  ck_assert_msg(strstr(text, "# HELP prt_test_weight") != NULL,
     "Expected histogram HELP text");
-  fail_unless(strstr(text, "# TYPE prt_test_weight histogram") != NULL,
+  ck_assert_msg(strstr(text, "# TYPE prt_test_weight histogram") != NULL,
     "Expected histogram TYPE text");
-  fail_unless(
+  ck_assert_msg(
     strstr(text, "prt_test_weight_bucket{foo=\"BAR\",le=\"+Inf\",protocol=\"ftp\"} 1") != NULL,
     "Expected labeled histogram bucket sample");
-  fail_unless(
+  ck_assert_msg(
     strstr(text, "prt_test_weight_count{foo=\"BAR\",protocol=\"ftp\"} 1") != NULL,
     "Expected labeled histogram count sample");
-  fail_unless(
+  ck_assert_msg(
     strstr(text, "prt_test_weight_sum{foo=\"BAR\",protocol=\"ftp\"} 76.42") != NULL,
     "Expected labeled histogram sum sample");
 
   mark_point();
   res = prom_metric_destroy(p, metric);
-  fail_unless(res == 0, "Failed to destroy metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to destroy metric: %s", strerror(errno));
 
   res = prom_metric_free(p, dbh);
-  fail_unless(res == 0, "Failed to free metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free metrics: %s", strerror(errno));
   (void) tests_rmpath(p, test_dir);
 }
 END_TEST

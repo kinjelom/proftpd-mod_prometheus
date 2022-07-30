@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,8 +68,8 @@ START_TEST (registry_free_test) {
 
   mark_point();
   res = prom_registry_free(NULL);
-  fail_unless(res < 0, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -81,35 +81,35 @@ START_TEST (registry_init_test) {
 
   mark_point();
   registry = prom_registry_init(NULL, NULL);
-  fail_unless(registry == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(registry == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, NULL);
-  fail_unless(registry == NULL, "Failed to handle null name");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(registry == NULL, "Failed to handle null name");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   name = prom_registry_get_name(NULL);
-  fail_unless(name == NULL, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(name == NULL, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   name = prom_registry_get_name(registry);
-  fail_unless(name != NULL, "Failed to get name: %s", strerror(errno));
-  fail_unless(strcmp(name, "test") == 0, "Expected 'test', got '%s'",
+  ck_assert_msg(name != NULL, "Failed to get name: %s", strerror(errno));
+  ck_assert_msg(strcmp(name, "test") == 0, "Expected 'test', got '%s'",
     name);
 
   res = prom_registry_free(registry);
-  fail_unless(res == 0, "Failed to free registry: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to free registry: %s", strerror(errno));
 }
 END_TEST
 
@@ -119,19 +119,19 @@ START_TEST (registry_get_metric_test) {
 
   mark_point();
   metric = prom_registry_get_metric(NULL, NULL);
-  fail_unless(metric == NULL, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(metric == NULL, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   metric = prom_registry_get_metric(registry, NULL);
-  fail_unless(metric == NULL, "Failed to handle null metric name");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(metric == NULL, "Failed to handle null metric name");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   prom_registry_free(registry);
@@ -147,19 +147,19 @@ START_TEST (registry_add_metric_test) {
 
   mark_point();
   res = prom_registry_add_metric(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   res = prom_registry_add_metric(registry, NULL);
-  fail_unless(res < 0, "Failed to handle null metric");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null metric");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* For purposes of testing, we don't need a real dbh here. */
@@ -167,15 +167,15 @@ START_TEST (registry_add_metric_test) {
   metric_name = "metric";
   dbh = palloc(p, 8);
   metric = prom_metric_create(p, metric_name, dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   res = prom_registry_add_metric(registry, metric);
-  fail_unless(res == 0, "Failed to add metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add metric: %s", strerror(errno));
 
   mark_point();
   metric = (struct prom_metric *) prom_registry_get_metric(registry,
     metric_name);
-  fail_unless(metric != NULL, "Failed to get metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to get metric: %s", strerror(errno));
 
   prom_registry_free(registry);
 }
@@ -189,39 +189,39 @@ START_TEST (registry_sort_metrics_test) {
 
   mark_point();
   res = prom_registry_sort_metrics(NULL);
-  fail_unless(res < 0, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   /* For purposes of testing, we don't need a real dbh here. */
   mark_point();
   dbh = palloc(p, 8);
   first_metric = prom_metric_create(p, "first", dbh);
-  fail_unless(first_metric != NULL, "Failed to create metric: %s",
+  ck_assert_msg(first_metric != NULL, "Failed to create metric: %s",
     strerror(errno));
 
   res = prom_registry_add_metric(registry, first_metric);
-  fail_unless(res == 0, "Failed to add metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add metric: %s", strerror(errno));
 
   mark_point();
   res = prom_registry_sort_metrics(registry);
-  fail_unless(res == 0, "Failed to sort metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to sort metrics: %s", strerror(errno));
 
   mark_point();
   second_metric = prom_metric_create(p, "second", dbh);
-  fail_unless(second_metric != NULL, "Failed to create metric: %s",
+  ck_assert_msg(second_metric != NULL, "Failed to create metric: %s",
     strerror(errno));
 
   res = prom_registry_add_metric(registry, second_metric);
-  fail_unless(res == 0, "Failed to add metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add metric: %s", strerror(errno));
 
   res = prom_registry_sort_metrics(registry);
-  fail_unless(res == 0, "Failed to sort metrics: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to sort metrics: %s", strerror(errno));
 
   prom_registry_free(registry);
 }
@@ -234,26 +234,26 @@ START_TEST (registry_set_dbh_test) {
 
   mark_point();
   res = prom_registry_set_dbh(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   res = prom_registry_set_dbh(registry, NULL);
-  fail_unless(res < 0, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* For purposes of testing, we don't need a real dbh here. */
   mark_point();
   dbh = palloc(p, 8);
   res = prom_registry_set_dbh(registry, dbh);
-  fail_unless(res == 0, "Failed to handle set dbh: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to handle set dbh: %s", strerror(errno));
 
   prom_registry_free(registry);
 }
@@ -265,25 +265,25 @@ START_TEST (registry_get_text_test) {
 
   mark_point();
   text = prom_registry_get_text(NULL, NULL);
-  fail_unless(text == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(text == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   text = prom_registry_get_text(p, NULL);
-  fail_unless(text == NULL, "Failed to handle null registry");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(text == NULL, "Failed to handle null registry");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   text = prom_registry_get_text(p, registry);
-  fail_unless(text == NULL, "Failed to handle absent metrics");
-  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+  ck_assert_msg(text == NULL, "Failed to handle absent metrics");
+  ck_assert_msg(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
   prom_registry_free(registry);
@@ -302,39 +302,39 @@ START_TEST (registry_get_text_with_metrics_test) {
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   metric = prom_metric_create(p, "metric", dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_registry_add_metric(registry, metric);
-  fail_unless(res == 0, "Failed to register metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to register metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, 1, NULL);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
   text = prom_registry_get_text(p, registry);
-  fail_unless(text != NULL, "Failed to get registry text: %s", strerror(errno));
+  ck_assert_msg(text != NULL, "Failed to get registry text: %s", strerror(errno));
 
   /* Use strstr(3) to assert bits of text. */
-  fail_unless(strstr(text, "# HELP test_metric_total") != NULL,
+  ck_assert_msg(strstr(text, "# HELP test_metric_total") != NULL,
     "Expected metric help, got '%s'", text);
-  fail_unless(strstr(text, "# TYPE test_metric_total counter") != NULL,
+  ck_assert_msg(strstr(text, "# TYPE test_metric_total counter") != NULL,
     "Expected metric type, got '%s'", text);
-  fail_unless(strstr(text, "test_metric_total 1") != NULL,
+  ck_assert_msg(strstr(text, "test_metric_total 1") != NULL,
     "Expected metric sample, got '%s'", text);
 
   prom_registry_free(registry);
@@ -355,28 +355,28 @@ START_TEST (registry_get_text_with_metrics_readonly_test) {
 
   mark_point();
   registry = prom_registry_init(p, "test");
-  fail_unless(registry != NULL, "Failed to create registry: %s",
+  ck_assert_msg(registry != NULL, "Failed to create registry: %s",
     strerror(errno));
 
   mark_point();
   dbh = prom_metric_init(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to init metrics: %s", strerror(errno));
 
   mark_point();
   metric = prom_metric_create(p, "metric", dbh);
-  fail_unless(metric != NULL, "Failed to create metric: %s", strerror(errno));
+  ck_assert_msg(metric != NULL, "Failed to create metric: %s", strerror(errno));
 
   mark_point();
   res = prom_registry_add_metric(registry, metric);
-  fail_unless(res == 0, "Failed to register metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to register metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_add_counter(metric, "total", "testing");
-  fail_unless(res == 0, "Failed to add counter to metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to add counter to metric: %s", strerror(errno));
 
   mark_point();
   res = prom_metric_incr(p, metric, 1, NULL);
-  fail_unless(res == 0, "Failed to increment metric: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to increment metric: %s", strerror(errno));
 
   mark_point();
 
@@ -385,22 +385,22 @@ START_TEST (registry_get_text_with_metrics_readonly_test) {
    */
   (void) prom_db_close(p, dbh);
   dbh = prom_metric_db_open(p, test_dir);
-  fail_unless(dbh != NULL, "Failed to open readonly dbh: %s", strerror(errno));
+  ck_assert_msg(dbh != NULL, "Failed to open readonly dbh: %s", strerror(errno));
 
   mark_point();
   res = prom_registry_set_dbh(registry, dbh);
-  fail_unless(res == 0, "Failed to set registry dbh: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set registry dbh: %s", strerror(errno));
 
   mark_point();
   text = prom_registry_get_text(p, registry);
-  fail_unless(text != NULL, "Failed to get registry text: %s", strerror(errno));
+  ck_assert_msg(text != NULL, "Failed to get registry text: %s", strerror(errno));
 
   /* Use strstr(3) to assert bits of text. */
-  fail_unless(strstr(text, "# HELP test_metric_total") != NULL,
+  ck_assert_msg(strstr(text, "# HELP test_metric_total") != NULL,
     "Expected metric help, got '%s'", text);
-  fail_unless(strstr(text, "# TYPE test_metric_total counter") != NULL,
+  ck_assert_msg(strstr(text, "# TYPE test_metric_total counter") != NULL,
     "Expected metric type, got '%s'", text);
-  fail_unless(strstr(text, "test_metric_total 1") != NULL,
+  ck_assert_msg(strstr(text, "test_metric_total 1") != NULL,
     "Expected metric sample, got '%s'", text);
 
   prom_registry_free(registry);
