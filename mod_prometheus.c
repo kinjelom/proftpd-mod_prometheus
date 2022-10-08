@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus
- * Copyright (c) 2021 TJ Saunders
+ * Copyright (c) 2021-2022 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -387,11 +387,6 @@ static void prom_exporter_stop(pid_t exporter_pid) {
   if (res < 0 &&
       errno == ESRCH) {
     return;
-  }
-
-  if (prom_http_stop(prometheus_pool, prometheus_exporter_http) < 0) {
-    pr_trace_msg(trace_channel, 3, "error stopping exporter http listener: %s",
-      strerror(errno));
   }
 
   res = kill(exporter_pid, SIGTERM);
