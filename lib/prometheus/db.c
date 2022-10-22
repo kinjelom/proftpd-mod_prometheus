@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus database implementation
- * Copyright (c) 2021 TJ Saunders
+ * Copyright (c) 2021-2022 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1137,6 +1137,11 @@ int prom_db_init(pool *p) {
     errno = EINVAL;
     return -1;
   }
+
+#if defined(SQLITE_CONFIG_SINGLETHREAD)
+  /* Tell SQLite that we are not a multi-threaded application. */
+  sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+#endif /* SQLITE_CONFIG_SINGLETHREAD */
 
 #if defined(SQLITE_CONFIG_LOG)
   /* Register an error logging callback with SQLite3. */

@@ -2046,6 +2046,11 @@ static int prom_init(void) {
    */
   pr_event_register(&prometheus_module, "core.exit", prom_exit_ev, NULL);
 
+#if defined(SQLITE_CONFIG_SINGLETHREAD)
+  /* Tell SQLite that we are not a multi-threaded application. */
+  sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+#endif /* SQLITE_CONFIG_SINGLETHREAD */
+
   return 0;
 }
 
