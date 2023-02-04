@@ -3846,14 +3846,16 @@ sub prom_scrape_metric_login_succeeded {
   if ($pid) {
     eval {
       # Allow server to start up
-      sleep(2);
+      sleep(3);
 
       my $client = ProFTPD::TestSuite::FTP->new('127.0.0.1', $port);
       $client->login($setup->{user}, $setup->{passwd});
       $client->quit();
 
+      sleep(1);
+
       my $ua = LWP::UserAgent->new();
-      $ua->timeout(3);
+      $ua->timeout(5);
 
       my $url = "http://127.0.0.1:$exporter_port/metrics";
       my $resp = $ua->get($url);
