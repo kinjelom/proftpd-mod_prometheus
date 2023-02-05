@@ -92,4 +92,10 @@ int prom_db_reindex(pool *p, struct prom_dbh *dbh,
 /* Obtain the ROWID for the last inserted row. */
 int prom_db_last_row_id(pool *p, struct prom_dbh *dbh, int64_t *row_id);
 
+/* Start a SQLite transaction. */
+int prom_db_begin_txn(pool *p, struct prom_dbh *dbh, const char **errstr);
+
+/* Commit/finish a SQLite transaction. */
+int prom_db_commit_txn(pool *p, struct prom_dbh *dbh, const char **errstr);
+
 #endif /* MOD_PROMETHEUS_DB_H */

@@ -721,12 +721,25 @@ static struct prom_dbh *db_open(pool *p, const char *table_path,
   }
 
   /* Tell SQLite to rely on OS-level write semantics. */
-  stmt = "PRAGMA synchronous = OFF;";
+  stmt = "PRAGMA synchronous = off;";
   res = prom_db_exec_stmt(p, dbh, stmt, NULL);
   if (res < 0) {
     pr_trace_msg(trace_channel, 2,
       "error setting SYNCHRONOUS pragma on SQLite database '%s': %s",
       table_path, sqlite3_errmsg(dbh->db));
+  }
+
+  /* For read-only connections, we're OK with bypassing any need for read
+   * locks on the database; Prometheus metrics are best-effort aggregations.
+   */
+  if (flags & SQLITE_OPEN_READONLY) {
+    stmt = "PRAGMA read_uncommitted = on;";
+    res = prom_db_exec_stmt(p, dbh, stmt, NULL);
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 2,
+        "error setting READ_UNCOMMITTED pragma on SQLite database '%s': %s",
+        table_path, sqlite3_errmsg(dbh->db));
+    }
   }
 
   dbh->prepared_stmts = pr_table_nalloc(dbh->pool, 0, 4);
@@ -1122,6 +1135,30 @@ int prom_db_last_row_id(pool *p, struct prom_dbh *dbh, int64_t *id) {
   (void) p;
   *id = sqlite3_last_insert_rowid(dbh->db);
   return 0;
+}
+
+int prom_db_begin_txn(pool *p, struct prom_dbh *dbh, const char **errstr) {
+  if (p == NULL ||
+      dbh == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  pr_trace_msg(trace_channel, 10, "schema '%s': beginning transaction",
+    dbh->schema);
+  return prom_db_exec_stmt(p, dbh, "BEGIN", errstr);
+}
+
+int prom_db_commit_txn(pool *p, struct prom_dbh *dbh, const char **errstr) {
+  if (p == NULL ||
+      dbh == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  pr_trace_msg(trace_channel, 10, "schema '%s': committing transaction",
+    dbh->schema);
+  return prom_db_exec_stmt(p, dbh, "COMMIT", errstr);
 }
 
 int prom_db_init(pool *p) {
