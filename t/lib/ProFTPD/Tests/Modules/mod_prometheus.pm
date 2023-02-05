@@ -2073,6 +2073,7 @@ sub prom_scrape_metric_log_message {
         PrometheusLog => $setup->{log_file},
         PrometheusTables => $table_dir,
         PrometheusExporter => "127.0.0.1:$exporter_port",
+        PrometheusOptions => 'EnableLogMessageMetrics',
       },
     },
   };
