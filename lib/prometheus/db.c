@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus database implementation
- * Copyright (c) 2021-2022 TJ Saunders
+ * Copyright (c) 2021-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1033,12 +1033,6 @@ struct prom_dbh *prom_db_open_readonly_with_version(pool *p,
   }
 
   destroy_pool(tmp_pool);
-
-  if (res < 0) {
-    errno = xerrno;
-    return NULL;
-  }
-
   return dbh;
 }
 
