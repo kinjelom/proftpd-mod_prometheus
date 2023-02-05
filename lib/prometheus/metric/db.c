@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus metrics datastore implementation
- * Copyright (c) 2021 TJ Saunders
+ * Copyright (c) 2021-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -179,7 +179,6 @@ int prom_metric_db_create(pool *p, struct prom_dbh *dbh,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
@@ -227,7 +226,6 @@ int prom_metric_db_exists(pool *p, struct prom_dbh *dbh,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
@@ -275,7 +273,6 @@ int prom_metric_db_sample_exists(pool *p, struct prom_dbh *dbh,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
@@ -324,7 +321,6 @@ static int db_sample_create(pool *p, struct prom_dbh *dbh, int64_t metric_id,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
@@ -367,7 +363,6 @@ static int db_sample_adj(pool *p, struct prom_dbh *dbh, const char *stmt,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
@@ -489,7 +484,6 @@ const array_header *prom_metric_db_sample_get(pool *p, struct prom_dbh *dbh,
 
   results = prom_db_exec_prepared_stmt(p, dbh, stmt, &errstr);
   xerrno = errno;
-  (void) prom_db_finish_stmt(p, dbh, stmt);
 
   if (results == NULL) {
     pr_trace_msg(trace_channel, 7,
