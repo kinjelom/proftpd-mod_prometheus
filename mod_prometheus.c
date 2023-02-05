@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus
- * Copyright (c) 2021-2022 TJ Saunders
+ * Copyright (c) 2021-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,6 +62,9 @@ static int prometheus_saw_pass_cmd = FALSE;
  * (e.g. for 500 ms timeout).
  */
 static time_t prometheus_exporter_timeout = 1;
+
+/* mod_prometheus option flags */
+#define PROM_OPT_ENABLE_LOG_MESSAGE_METRICS		0x001
 
 static void prom_event_decr(const char *metric_name, uint32_t decr, ...)
 #if defined(__GNUC__)
@@ -766,8 +769,13 @@ MODRET set_prometheusoptions(cmd_rec *cmd) {
   c = add_config_param(cmd->argv[0], 1, NULL);
 
   for (i = 1; i < cmd->argc; i++) {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown PrometheusOption '",
-      cmd->argv[i], "'", NULL));
+    if (strcasecmp(cmd->argv[i], "EnableLogMessageMetrics") == 0) {
+      opts |= PROM_OPT_ENABLE_LOG_MESSAGE_METRICS;
+
+    } else {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown PrometheusOption '",
+        cmd->argv[i], "'", NULL));
+    }
   }
 
   c->argv[0] = pcalloc(c->pool, sizeof(unsigned long));
@@ -2055,11 +2063,24 @@ static int prom_init(void) {
 }
 
 static int prom_sess_init(void) {
+  config_rec *c;
   const char *metric_name;
   const struct prom_metric *metric;
 
   if (prometheus_engine == FALSE) {
     return 0;
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "PrometheusOptions", FALSE);
+  while (c != NULL) {
+    unsigned long opts;
+
+    pr_signals_handle();
+
+    opts = *((unsigned long *) c->argv[0]);
+    prometheus_opts |= opts;
+
+    c = find_config_next(c, c->next, CONF_PARAM, "PrometheusOptions", FALSE);
   }
 
   pr_event_register(&prometheus_module, "core.timeout-idle",
@@ -2076,10 +2097,12 @@ static int prom_sess_init(void) {
   pr_event_register(&prometheus_module, "mod_auth.authentication-code",
     prom_auth_code_ev, NULL);
 
-  pr_event_register(&prometheus_module, "core.log.syslog", prom_log_msg_ev,
-    NULL);
-  pr_event_register(&prometheus_module, "core.log.systemlog", prom_log_msg_ev,
-    NULL);
+  if (prometheus_opts & PROM_OPT_ENABLE_LOG_MESSAGE_METRICS) {
+    pr_event_register(&prometheus_module, "core.log.syslog", prom_log_msg_ev,
+      NULL);
+    pr_event_register(&prometheus_module, "core.log.systemlog", prom_log_msg_ev,
+      NULL);
+  }
 
   if (pr_module_exists("mod_tls.c") == TRUE) {
     /* mod_tls events */
