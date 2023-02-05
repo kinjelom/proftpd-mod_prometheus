@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus metric implementation
- * Copyright (c) 2021 TJ Saunders
+ * Copyright (c) 2021-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -778,7 +778,7 @@ static const char *get_double_text(pool *p, double val) {
 int prom_metric_add_histogram(struct prom_metric *metric, const char *suffix,
     const char *help_text, unsigned int bucket_count, ...) {
   register unsigned int i;
-  int res, xerrno, have_error = FALSE;
+  int res, xerrno = 0, have_error = FALSE;
   va_list ap;
 
   if (metric == NULL ||
