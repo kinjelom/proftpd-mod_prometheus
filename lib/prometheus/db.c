@@ -352,17 +352,17 @@ int prom_db_prepare_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
     pr_trace_msg(trace_channel, 4,
       "error stashing prepared statement '%s': %s", stmt, strerror(xerrno));
     errno = xerrno;
-    return -1; 
+    return -1;
   }
 
-  return 0; 
+  return 0;
 }
 
 int prom_db_bind_stmt(pool *p, struct prom_dbh *dbh, const char *stmt,
     int idx, int type, void *data) {
   sqlite3_stmt *pstmt;
   int res;
- 
+
   if (p == NULL ||
       dbh == NULL ||
       stmt == NULL) {
@@ -524,7 +524,7 @@ int prom_db_finish_stmt(pool *p, struct prom_dbh *dbh, const char *stmt) {
     return -1;
   }
 
-  (void) pr_table_remove(dbh->prepared_stmts, stmt, NULL); 
+  (void) pr_table_remove(dbh->prepared_stmts, stmt, NULL);
   return 0;
 }
 

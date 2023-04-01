@@ -325,7 +325,7 @@ sub prom_start_existing_dirs {
 
   # First, start the server
   server_start($setup->{config_file});
-  
+
   # ...then stop the server.  This means mod_prometheus will have created all
   # the necessary directories, etc.
   sleep(2);
