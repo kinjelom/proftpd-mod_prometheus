@@ -316,7 +316,7 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
       int xerrno = errno;
 
       PRIVS_RELINQUISH
- 
+
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "unable to chroot to PrometheusTables/empty/ directory '%s': %s",
         exporter_chroot, strerror(xerrno));
@@ -741,7 +741,7 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
     c->argv[1] = pstrdup(c->pool, cmd->argv[2]);
     c->argv[2] = pstrdup(c->pool, cmd->argv[3]);
   }
- 
+
   return PR_HANDLED(cmd);
 }
 
@@ -780,7 +780,7 @@ MODRET set_prometheusoptions(cmd_rec *cmd) {
 
   c->argv[0] = pcalloc(c->pool, sizeof(unsigned long));
   *((unsigned long *) c->argv[0]) = opts;
- 
+
   return PR_HANDLED(cmd);
 }
 
@@ -789,11 +789,11 @@ MODRET set_prometheustables(cmd_rec *cmd) {
   int res;
   struct stat st;
   char *path;
- 
+
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
-  path = cmd->argv[1]; 
+  path = cmd->argv[1];
   if (*path != '/') {
     CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "must be a full path: '", path, "'",
       NULL));
@@ -1934,7 +1934,7 @@ static void prom_tls_data_handshake_err_ev(const void *event_data,
   if (prometheus_engine == FALSE) {
     return;
   }
-  
+
   prom_event_incr("handshake_error", 1, "connection", "data", NULL);
 }
 
