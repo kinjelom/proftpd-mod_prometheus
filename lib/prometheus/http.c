@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus http implementation
- * Copyright (c) 2021 TJ Saunders
+ * Copyright (c) 2021-2024 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -71,7 +71,7 @@ enum MHD_Result {
   /* MHD result code for "YES". */
   MHD_YES = 1
 };
-#endif
+#endif /* # MHD_VERSION older than 0x00097002 */
 
 struct prom_http {
   pool *pool;
@@ -317,10 +317,17 @@ static void log_clf(pool *p, struct MHD_Connection *conn, const char *username,
     status_code, (unsigned long) resplen);
 }
 
+#if MHD_VERSION < 0x00097002
+static int handle_request_cb(void *user_data,
+    struct MHD_Connection *conn, const char *http_uri, const char *http_method,
+    const char *http_version, const char *request_body, size_t *request_bodysz,
+    void **conn_user_data) {
+#else
 static enum MHD_Result handle_request_cb(void *user_data,
     struct MHD_Connection *conn, const char *http_uri, const char *http_method,
     const char *http_version, const char *request_body, size_t *request_bodysz,
     void **conn_user_data) {
+#endif
   struct prom_http *http;
   pool *resp_pool;
   unsigned int status_code;
