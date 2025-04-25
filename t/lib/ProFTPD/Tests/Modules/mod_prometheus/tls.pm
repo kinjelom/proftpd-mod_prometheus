@@ -105,6 +105,7 @@ sub prom_scrape_metric_handshake_error_tls_ctrl {
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
+    AuthOrder => 'mod_auth_file.c',
 
     IfModules => {
       'mod_delay.c' => {
@@ -249,6 +250,7 @@ sub prom_scrape_metric_handshake_error_tls_data {
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
+    AuthOrder => 'mod_auth_file.c',
 
     TimeoutLinger => 1,
 
@@ -300,7 +302,7 @@ sub prom_scrape_metric_handshake_error_tls_data {
       my $ssl_opts = {
         Encryption => 'E',
         Port => $port,
-        SSL_version => 'TLSv1',
+        SSL_version => 'TLSv1.2',
       };
 
       if ($ENV{TEST_VERBOSE}) {
@@ -428,6 +430,7 @@ sub prom_scrape_metric_tls_protocol {
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
+    AuthOrder => 'mod_auth_file.c',
 
     IfModules => {
       'mod_delay.c' => {
