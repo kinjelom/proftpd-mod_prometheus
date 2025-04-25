@@ -29,25 +29,25 @@ jobs:
           - gcc
         container:
           - almalinux:8
-          - alpine:3.17
-          - ubuntu:18.04
+          - alpine:3.18
+          - ubuntu:22.04
 
     container: ${{ matrix.container }}
 
     steps:
       - name: Checkout ProFTPD
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: proftpd/proftpd
           path: proftpd
 
       - name: Checkout module source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: proftpd/contrib/mod_prometheus
 
       - name: Whitespace check
-        if: ${{ matrix.container == 'ubuntu:18.04' }}
+        if: ${{ matrix.container == 'ubuntu:22.04' }}
         run: |
           apt-get update -qq
           apt-get install -y git
@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Install Alpine packages
-        if: ${{ matrix.container == 'alpine:3.17' }}
+        if: ${{ matrix.container == 'alpine:3.18' }}
         run: |
           apk update
           # for builds
@@ -106,7 +106,7 @@ jobs:
           openssl version -a
 
       - name: Install Ubuntu packages
-        if: ${{ matrix.container == 'ubuntu:18.04' }}
+        if: ${{ matrix.container == 'ubuntu:22.04' }}
         run: |
           apt-get update -qq
           # for builds
@@ -152,7 +152,7 @@ jobs:
           openssl version -a
 
       - name: Prepare code coverage
-        if: ${{ matrix.container == 'ubuntu:18.04' }}
+        if: ${{ matrix.container == 'ubuntu:22.04' }}
         run: |
           lcov --directory proftpd --zerocounters
 
@@ -168,7 +168,7 @@ jobs:
         env:
           CC: ${{ matrix.compiler }}
         # Note: Skip the unit tests on Alpine
-        if: ${{ matrix.container != 'alpine:3.17' }}
+        if: ${{ matrix.container != 'alpine:3.18' }}
         run: |
           cd proftpd/contrib/mod_prometheus
           make TEST_VERBOSE=1 check
@@ -179,7 +179,7 @@ jobs:
           make install
 
       - name: Run integration tests
-        if: ${{ matrix.compiler == 'gcc' && matrix.container == 'ubuntu:18.04' }}
+        if: ${{ matrix.compiler == 'gcc' && matrix.container == 'ubuntu:22.04' }}
         env:
           PROFTPD_TEST_BIN: /usr/local/sbin/proftpd
           PROFTPD_TEST_DIR: ${{ github.workspace }}/proftpd
@@ -202,7 +202,7 @@ jobs:
           make install
 
       - name: Check HTML docs
-        if: ${{ matrix.container == 'ubuntu:18.04' }}
+        if: ${{ matrix.container == 'ubuntu:22.04' }}
         run: |
           cd proftpd/contrib/mod_prometheus
           for f in $(/bin/ls *.html); do echo "Processing $f"; tidy -errors -omit -q $f; done || exit 0
