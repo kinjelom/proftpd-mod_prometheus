@@ -2345,9 +2345,15 @@ sub prom_scrape_metric_auth_anon_ok {
 
     AuthUserFile => $setup->{auth_user_file},
     AuthGroupFile => $setup->{auth_group_file},
-    AuthOrder => 'mod_auth_file.c',
+
+    # NOTE: Do NOT use "AuthOrder mod_auth_file.c" here, since the anonymous
+    # user we're using appears in /etc/passwd, not in our custom AuthUserFile.
 
     IfModules => {
+      'mod_auth_pam.c' => {
+        AuthPAM => 'off',
+      },
+
       'mod_delay.c' => {
         DelayEngine => 'off',
       },
