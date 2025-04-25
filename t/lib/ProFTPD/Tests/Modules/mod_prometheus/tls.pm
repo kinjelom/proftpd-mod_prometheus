@@ -302,7 +302,7 @@ sub prom_scrape_metric_handshake_error_tls_data {
       my $ssl_opts = {
         Encryption => 'E',
         Port => $port,
-        SSL_version => 'TLSv1.2',
+        SSL_version => 'TLSv1_2',
       };
 
       if ($ENV{TEST_VERBOSE}) {
