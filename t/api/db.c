@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus API testsuite
- * Copyright (c) 2021-2022 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2021-2025 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -265,7 +265,7 @@ START_TEST (db_open_with_version_test) {
     schema_name, schema_version, strerror(errno));
 
   res = prom_db_close(p, dbh);
-  ck_assert_msg(res == 0, "Failed to close databas: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to close database: %s", strerror(errno));
 
   mark_point();
   schema_version = 99;
@@ -380,7 +380,7 @@ START_TEST (db_open_readonly_with_version_test) {
     schema_name, schema_version, strerror(errno));
 
   res = prom_db_close(p, dbh);
-  ck_assert_msg(res == 0, "Failed to close databas: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to close database: %s", strerror(errno));
 
   mark_point();
   schema_version = 99;

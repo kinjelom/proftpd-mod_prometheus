@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_prometheus
- * Copyright (c) 2021-2023 TJ Saunders
+ * Copyright (c) 2021-2025 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1488,7 +1488,7 @@ static void create_session_metrics(pool *p, struct prom_dbh *dbh) {
 
   metric = prom_metric_create(prometheus_pool, "directory_list", dbh);
   prom_metric_add_counter(metric, "total",
-    "Number of succesful directory listings");
+    "Number of successful directory listings");
   prom_metric_add_gauge(metric, "count", "Current count of directory listings");
   res = prom_registry_add_metric(prometheus_registry, metric);
   if (res < 0) {
