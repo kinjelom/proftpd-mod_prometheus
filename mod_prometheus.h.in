@@ -61,6 +61,8 @@
 
 /* Miscellaneous */
 extern int prometheus_logfd;
+extern int prometheus_httpd_logfd;
+extern int prometheus_httpd_access_logfd;
 extern module prometheus_module;
 extern pool *prometheus_pool;
 

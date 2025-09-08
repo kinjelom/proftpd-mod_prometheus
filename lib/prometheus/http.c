@@ -25,6 +25,9 @@
 #include "mod_prometheus.h"
 #include "prometheus/http.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+
 #if defined(HAVE_ZLIB_H)
 # include <zlib.h>
 
@@ -88,12 +91,27 @@ static const char *trace_channel = "prometheus.http";
 static const char *clf_channel = "prometheus.http.clf";
 
 static void log_cb(void *user_data, const char *fmt, va_list msg) {
-  pr_trace_vmsg(trace_channel, 7, fmt, msg);
+  if (prometheus_httpd_logfd >= 0) {
+    char buf[1024];
+
+    vsnprintf(buf, sizeof(buf), fmt, msg);
+    pr_log_writefile(prometheus_httpd_logfd, MOD_PROMETHEUS_VERSION,
+      "%s", buf);
+
+  } else {
+    pr_trace_vmsg(trace_channel, 7, fmt, msg);
+  }
 }
 
 static void panic_cb(void *user_data, const char *file, unsigned int lineno,
     const char *reason) {
-  (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+  int fd = prometheus_httpd_logfd;
+
+  if (fd < 0) {
+    fd = prometheus_logfd;
+  }
+
+  (void) pr_log_writefile(fd, MOD_PROMETHEUS_VERSION,
     "microhttpd panic: [%s:%u] %s", file, lineno, reason);
 }
 
@@ -315,6 +333,13 @@ static void log_clf(pool *p, struct MHD_Connection *conn, const char *username,
   pr_trace_msg(clf_channel, clf_level, "%s - %s [%s] \"%s %s %s\" %u %lu",
     remote_ip, username, timestamp, http_method, http_uri, http_version,
     status_code, (unsigned long) resplen);
+
+  if (prometheus_httpd_access_logfd >= 0) {
+    (void) pr_log_writefile(prometheus_httpd_access_logfd, MOD_PROMETHEUS_VERSION,
+      "%s - %s [%s] \"%s %s %s\" %u %lu",
+      remote_ip, username, timestamp, http_method, http_uri, http_version,
+      status_code, (unsigned long) resplen);
+  }
 }
 
 #if MHD_VERSION < 0x00097002

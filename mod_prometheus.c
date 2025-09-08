@@ -33,6 +33,7 @@
 #include "prometheus/metric/db.h"
 #include "prometheus/http.h"
 #include <fcntl.h>
+#include <mod_ctrls.h>
 
 /* Defaults */
 #define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
@@ -40,6 +41,8 @@
 extern xaset_t *server_list;
 
 int prometheus_logfd = -1;
+int prometheus_httpd_logfd = -1;
+int prometheus_httpd_access_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
@@ -55,19 +58,17 @@ struct prom_exporter {
   struct prom_http *http;
   pid_t pid;
   const char *pidfile_path;
+  pr_netaddr_t *addr;
+  const char *user;
+  const char *pass;
+  /* Number of seconds to wait for the exporter process to stop before
+   * sending SIGKILL.
+   */
+  time_t stop_timeout;
 };
 static struct prom_exporter *prometheus_exporter = NULL;
-
 static int prometheus_saw_user_cmd = FALSE;
 static int prometheus_saw_pass_cmd = FALSE;
-
-/* Number of seconds to wait for the exporter process to stop before
- * we terminate it with extreme prejudice.
- *
- * Currently this has a granularity of seconds; needs to be in millsecs
- * (e.g. for 500 ms timeout).
- */
-static time_t prometheus_exporter_timeout = 1;
 
 /* mod_prometheus option flags */
 #define PROM_OPT_ENABLE_LOG_MESSAGE_METRICS		0x001
@@ -196,6 +197,78 @@ static int prom_openlog(void) {
         } else if (res == PR_LOG_SYMLINK) {
           pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
             ": notice: unable to open PrometheusLog '%s': cannot log to "
+            "a symlink", path);
+        }
+      }
+    }
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "PrometheusHTTPLog", FALSE);
+  if (c != NULL) {
+    const char *path;
+
+    path = c->argv[0];
+
+    if (strncasecmp(path, "none", 5) != 0) {
+      int xerrno;
+
+      pr_signals_block();
+      PRIVS_ROOT
+      res = pr_log_openfile(path, &prometheus_httpd_logfd, 0600);
+      xerrno = errno;
+      PRIVS_RELINQUISH
+      pr_signals_unblock();
+
+      if (res < 0) {
+        if (res == -1) {
+          pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPLog '%s': %s", path,
+            strerror(xerrno));
+
+        } else if (res == PR_LOG_WRITABLE_DIR) {
+          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPLog '%s': parent directory is "
+            "world-writable", path);
+
+        } else if (res == PR_LOG_SYMLINK) {
+          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPLog '%s': cannot log to "
+            "a symlink", path);
+        }
+      }
+    }
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "PrometheusHTTPAccessLog", FALSE);
+  if (c != NULL) {
+    const char *path;
+
+    path = c->argv[0];
+
+    if (strncasecmp(path, "none", 5) != 0) {
+      int xerrno;
+
+      pr_signals_block();
+      PRIVS_ROOT
+      res = pr_log_openfile(path, &prometheus_httpd_access_logfd, 0600);
+      xerrno = errno;
+      PRIVS_RELINQUISH
+      pr_signals_unblock();
+
+      if (res < 0) {
+        if (res == -1) {
+          pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPAccessLog '%s': %s", path,
+            strerror(xerrno));
+
+        } else if (res == PR_LOG_WRITABLE_DIR) {
+          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPAccessLog '%s': parent directory is "
+            "world-writable", path);
+
+        } else if (res == PR_LOG_SYMLINK) {
+          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
+            ": notice: unable to open PrometheusHTTPAccessLog '%s': cannot log to "
             "a symlink", path);
         }
       }
@@ -456,6 +529,12 @@ static void prom_sigchld_ev(const void *event_data, void *user_data) {
   prom_exporter_remove_pidfile(prometheus_exporter);
 
   pr_event_unregister(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev);
+
+  if (prometheus_engine == TRUE) {
+    pr_trace_msg(trace_channel, 3,
+      "exporter process exited, restarting");
+    (void) prometheus_httpd_start();
+  }
 }
 
 static void prom_exporter_stop(struct prom_exporter *exporter) {
@@ -518,11 +597,11 @@ static void prom_exporter_stop(struct prom_exporter *exporter) {
     }
 
     /* Check the time elapsed since we started. */
-    if ((time(NULL) - start_time) > prometheus_exporter_timeout) {
+    if ((time(NULL) - start_time) > exporter->stop_timeout) {
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "exporter process ID %lu took longer than timeout (%lu secs) to "
         "stop, sending SIGKILL (signal %d)", (unsigned long) exporter_pid,
-        prometheus_exporter_timeout, SIGKILL);
+        exporter->stop_timeout, SIGKILL);
       res = kill(exporter_pid, SIGKILL);
       if (res < 0) {
         (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
@@ -561,6 +640,47 @@ static void prom_exporter_stop(struct prom_exporter *exporter) {
   exporter->pid = 0;
   exporter->http = NULL;
   prom_exporter_remove_pidfile(exporter);
+}
+
+static int prometheus_httpd_start(void) {
+  if (prometheus_exporter == NULL) {
+    return -1;
+  }
+
+  if (prometheus_exporter->pid > 0) {
+    return 0;
+  }
+
+  if (prometheus_exporter->addr == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  prometheus_exporter->pid = prom_exporter_start(prometheus_exporter,
+    prometheus_pool, prometheus_exporter->addr, prometheus_exporter->user,
+    prometheus_exporter->pass);
+  if (prometheus_exporter->pid == 0) {
+    return -1;
+  }
+
+  pr_event_register(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev,
+    NULL);
+
+  pr_trace_msg(trace_channel, 7, "started Prometheus exporter PID %lu",
+    (unsigned long) prometheus_exporter->pid);
+
+  return 0;
+}
+
+static int prometheus_httpd_stop(void) {
+  if (prometheus_exporter == NULL || prometheus_exporter->pid <= 0) {
+    return 0;
+  }
+
+  pr_event_unregister(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev);
+  prom_exporter_stop(prometheus_exporter);
+  pr_trace_msg(trace_channel, 7, "stopped Prometheus exporter");
+  return 0;
 }
 
 static pr_table_t *prom_get_labels(pool *p) {
@@ -835,6 +955,24 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
 
 /* usage: PrometheusLog path|"none" */
 MODRET set_prometheuslog(cmd_rec *cmd) {
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  (void) add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
+  return PR_HANDLED(cmd);
+}
+
+/* usage: PrometheusHTTPLog path|"none" */
+MODRET set_prometheushttplog(cmd_rec *cmd) {
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  (void) add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
+  return PR_HANDLED(cmd);
+}
+
+/* usage: PrometheusHTTPAccessLog path|"none" */
+MODRET set_prometheushttpaccesslog(cmd_rec *cmd) {
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
@@ -1438,6 +1576,16 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
     (void) close(prometheus_logfd);
     prometheus_logfd = -1;
   }
+
+  if (prometheus_httpd_logfd >= 0) {
+    (void) close(prometheus_httpd_logfd);
+    prometheus_httpd_logfd = -1;
+  }
+
+  if (prometheus_httpd_access_logfd >= 0) {
+    (void) close(prometheus_httpd_access_logfd);
+    prometheus_httpd_access_logfd = -1;
+  }
 }
 
 static void prom_log_msg_ev(const void *event_data, void *user_data) {
@@ -1526,7 +1674,7 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   /* Unregister ourselves from all events. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
-  prom_exporter_stop(prometheus_exporter);
+  prometheus_httpd_stop();
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
@@ -1541,6 +1689,16 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
+
+  if (prometheus_httpd_logfd >= 0) {
+    (void) close(prometheus_httpd_logfd);
+    prometheus_httpd_logfd = -1;
+  }
+
+  if (prometheus_httpd_access_logfd >= 0) {
+    (void) close(prometheus_httpd_access_logfd);
+    prometheus_httpd_access_logfd = -1;
+  }
 }
 #endif /* PR_SHARED_MODULE */
 
@@ -1850,6 +2008,7 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
   if (prometheus_exporter == NULL) {
     prometheus_exporter = pcalloc(prometheus_pool, sizeof(struct prom_exporter));
+    prometheus_exporter->stop_timeout = 1;
   }
 
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusPidFile", FALSE);
@@ -1935,9 +2094,11 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     exporter_password = pr_env_get(c->pool, "PROMETHEUS_PASSWORD");
   }
 
-  prometheus_exporter->pid = prom_exporter_start(prometheus_exporter,
-    prometheus_pool, exporter_addr, exporter_username, exporter_password);
-  if (prometheus_exporter->pid == 0) {
+  prometheus_exporter->addr = exporter_addr;
+  prometheus_exporter->user = exporter_username;
+  prometheus_exporter->pass = exporter_password;
+
+  if (prometheus_httpd_start() < 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
@@ -1958,7 +2119,7 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
   pr_trace_msg(trace_channel, 17,
     "restart event received, resetting counters");
 
-  prom_exporter_stop(prometheus_exporter);
+  prometheus_httpd_stop();
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
@@ -1972,10 +2133,20 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
    */
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
+
+  if (prometheus_httpd_logfd >= 0) {
+    (void) close(prometheus_httpd_logfd);
+    prometheus_httpd_logfd = -1;
+  }
+
+  if (prometheus_httpd_access_logfd >= 0) {
+    (void) close(prometheus_httpd_access_logfd);
+    prometheus_httpd_access_logfd = -1;
+  }
 }
 
 static void prom_shutdown_ev(const void *event_data, void *user_data) {
-  prom_exporter_stop(prometheus_exporter);
+  prometheus_httpd_stop();
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
@@ -1985,6 +2156,77 @@ static void prom_shutdown_ev(const void *event_data, void *user_data) {
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
+
+  if (prometheus_httpd_logfd >= 0) {
+    (void) close(prometheus_httpd_logfd);
+    prometheus_httpd_logfd = -1;
+  }
+
+  if (prometheus_httpd_access_logfd >= 0) {
+    (void) close(prometheus_httpd_access_logfd);
+    prometheus_httpd_access_logfd = -1;
+  }
+}
+
+static void prom_sighup_ev(const void *event_data, void *user_data) {
+  if (prometheus_engine == FALSE) {
+    return;
+  }
+
+  pr_trace_msg(trace_channel, 7,
+    "SIGHUP received, restarting Prometheus exporter");
+  prometheus_httpd_stop();
+  (void) prometheus_httpd_start();
+}
+
+static int prom_ctrl_start(pr_ctrls_t *ctrl, int argc, char **argv) {
+  if (prometheus_engine == FALSE) {
+    pr_ctrls_add_response(ctrl, R_550,
+      "Prometheus exporter not enabled");
+    return PR_CTRL_ACTION_RET_ERR;
+  }
+
+  if (prometheus_httpd_start() < 0) {
+    pr_ctrls_add_response(ctrl, R_550,
+      "unable to start Prometheus exporter");
+    return PR_CTRL_ACTION_RET_ERR;
+  }
+
+  pr_ctrls_add_response(ctrl, R_200,
+    "Prometheus exporter started");
+  return PR_CTRL_ACTION_RET_OK;
+}
+
+static int prom_ctrl_stop(pr_ctrls_t *ctrl, int argc, char **argv) {
+  if (prometheus_engine == FALSE) {
+    pr_ctrls_add_response(ctrl, R_550,
+      "Prometheus exporter not enabled");
+    return PR_CTRL_ACTION_RET_ERR;
+  }
+
+  prometheus_httpd_stop();
+  pr_ctrls_add_response(ctrl, R_200,
+    "Prometheus exporter stopped");
+  return PR_CTRL_ACTION_RET_OK;
+}
+
+static int prom_ctrl_restart(pr_ctrls_t *ctrl, int argc, char **argv) {
+  if (prometheus_engine == FALSE) {
+    pr_ctrls_add_response(ctrl, R_550,
+      "Prometheus exporter not enabled");
+    return PR_CTRL_ACTION_RET_ERR;
+  }
+
+  prometheus_httpd_stop();
+  if (prometheus_httpd_start() < 0) {
+    pr_ctrls_add_response(ctrl, R_550,
+      "unable to restart Prometheus exporter");
+    return PR_CTRL_ACTION_RET_ERR;
+  }
+
+  pr_ctrls_add_response(ctrl, R_200,
+    "Prometheus exporter restarted");
+  return PR_CTRL_ACTION_RET_OK;
 }
 
 static void prom_startup_ev(const void *event_data, void *user_data) {
@@ -1999,7 +2241,6 @@ static void prom_startup_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  pr_event_register(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev, NULL);
 }
 
 static void prom_timeout_idle_ev(const void *event_data, void *user_data) {
@@ -2203,6 +2444,15 @@ static int prom_init(void) {
   pr_event_register(&prometheus_module, "core.shutdown", prom_shutdown_ev,
     NULL);
   pr_event_register(&prometheus_module, "core.startup", prom_startup_ev, NULL);
+  pr_event_register(&prometheus_module, "core.signal.SIGHUP", prom_sighup_ev,
+    NULL);
+
+  pr_ctrls_register_action("prometheus", "restart", prom_ctrl_restart,
+    "restart Prometheus exporter", PR_CTRL_OPT_NONE);
+  pr_ctrls_register_action("prometheus", "stop", prom_ctrl_stop,
+    "stop Prometheus exporter", PR_CTRL_OPT_NONE);
+  pr_ctrls_register_action("prometheus", "start", prom_ctrl_start,
+    "start Prometheus exporter", PR_CTRL_OPT_NONE);
 
   /* Normally we should register the 'core.exit' event listener in the
    * sess_init callback.  However, we use this listener to listen for
@@ -2332,7 +2582,9 @@ static int prom_sess_init(void) {
 static conftable prometheus_conftab[] = {
   { "PrometheusEngine",		set_prometheusengine,		  NULL },
   { "PrometheusExporter",	set_prometheusexporter,		NULL },
-  { "PrometheusLog",		  set_prometheuslog,		    NULL },
+  { "PrometheusLog",              set_prometheuslog,                NULL },
+  { "PrometheusHTTPLog",         set_prometheushttplog,           NULL },
+  { "PrometheusHTTPAccessLog",   set_prometheushttpaccesslog,     NULL },
   { "PrometheusOptions",	set_prometheusoptions,		NULL },
   { "PrometheusPidFile",	set_prometheuspidfile,		NULL },
   { "PrometheusTables",		set_prometheustables,		  NULL },
