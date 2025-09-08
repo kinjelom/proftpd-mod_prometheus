@@ -35,6 +35,28 @@
 #include <fcntl.h>
 #include <mod_ctrls.h>
 
+/*
+ * The ProFTPD 1.3.9 release updated the Controls API, renaming several
+ * symbols.  For backwards compatibility we provide fallbacks for the older
+ * names used by mod_prometheus.
+ */
+#if PROFTPD_VERSION_NUMBER >= 0x0001030900
+/* The new API uses pr_ctrls_register(); map the older name to it. */
+# define pr_ctrls_register_action(module, action, handler, desc, flags) \
+    pr_ctrls_register((module), (action), (handler), (flags))
+
+/* The return codes and option flag no longer exist; provide sane defaults. */
+# ifndef PR_CTRL_ACTION_RET_ERR
+#  define PR_CTRL_ACTION_RET_ERR   -1
+# endif
+# ifndef PR_CTRL_ACTION_RET_OK
+#  define PR_CTRL_ACTION_RET_OK    0
+# endif
+# ifndef PR_CTRL_OPT_NONE
+#  define PR_CTRL_OPT_NONE         0
+# endif
+#endif /* ProFTPD 1.3.9 Controls API */
+
 /* Defaults */
 #define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
 
@@ -2205,51 +2227,51 @@ static void prom_sighup_ev(const void *event_data, void *user_data) {
 
 static int prom_ctrl_start(pr_ctrls_t *ctrl, int argc, char **argv) {
   if (prometheus_engine == FALSE) {
-    pr_ctrls_add_response(ctrl, R_550,
-      "Prometheus exporter not enabled");
+    pr_ctrls_add_response(ctrl,
+      "550 Prometheus exporter not enabled");
     return PR_CTRL_ACTION_RET_ERR;
   }
 
   if (prometheus_httpd_start() < 0) {
-    pr_ctrls_add_response(ctrl, R_550,
-      "unable to start Prometheus exporter");
+    pr_ctrls_add_response(ctrl,
+      "550 unable to start Prometheus exporter");
     return PR_CTRL_ACTION_RET_ERR;
   }
 
-  pr_ctrls_add_response(ctrl, R_200,
-    "Prometheus exporter started");
+  pr_ctrls_add_response(ctrl,
+    "200 Prometheus exporter started");
   return PR_CTRL_ACTION_RET_OK;
 }
 
 static int prom_ctrl_stop(pr_ctrls_t *ctrl, int argc, char **argv) {
   if (prometheus_engine == FALSE) {
-    pr_ctrls_add_response(ctrl, R_550,
-      "Prometheus exporter not enabled");
+    pr_ctrls_add_response(ctrl,
+      "550 Prometheus exporter not enabled");
     return PR_CTRL_ACTION_RET_ERR;
   }
 
   prometheus_httpd_stop();
-  pr_ctrls_add_response(ctrl, R_200,
-    "Prometheus exporter stopped");
+  pr_ctrls_add_response(ctrl,
+    "200 Prometheus exporter stopped");
   return PR_CTRL_ACTION_RET_OK;
 }
 
 static int prom_ctrl_restart(pr_ctrls_t *ctrl, int argc, char **argv) {
   if (prometheus_engine == FALSE) {
-    pr_ctrls_add_response(ctrl, R_550,
-      "Prometheus exporter not enabled");
+    pr_ctrls_add_response(ctrl,
+      "550 Prometheus exporter not enabled");
     return PR_CTRL_ACTION_RET_ERR;
   }
 
   prometheus_httpd_stop();
   if (prometheus_httpd_start() < 0) {
-    pr_ctrls_add_response(ctrl, R_550,
-      "unable to restart Prometheus exporter");
+    pr_ctrls_add_response(ctrl,
+      "550 unable to restart Prometheus exporter");
     return PR_CTRL_ACTION_RET_ERR;
   }
 
-  pr_ctrls_add_response(ctrl, R_200,
-    "Prometheus exporter restarted");
+  pr_ctrls_add_response(ctrl,
+    "200 Prometheus exporter restarted");
   return PR_CTRL_ACTION_RET_OK;
 }
 
