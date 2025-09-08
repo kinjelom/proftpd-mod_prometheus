@@ -32,6 +32,7 @@
 #include "prometheus/metric.h"
 #include "prometheus/metric/db.h"
 #include "prometheus/http.h"
+#include <fcntl.h>
 
 /* Defaults */
 #define PROMETHEUS_DEFAULT_EXPORTER_PORT	9273
@@ -49,8 +50,13 @@ static uint64_t prometheus_connected_ms = 0;
 
 static struct prom_dbh *prometheus_dbh = NULL;
 static struct prom_registry *prometheus_registry = NULL;
-static struct prom_http *prometheus_exporter_http = NULL;
-static pid_t prometheus_exporter_pid = 0;
+
+struct prom_exporter {
+  struct prom_http *http;
+  pid_t pid;
+  const char *pidfile_path;
+};
+static struct prom_exporter *prometheus_exporter = NULL;
 
 static int prometheus_saw_user_cmd = FALSE;
 static int prometheus_saw_pass_cmd = FALSE;
@@ -247,8 +253,44 @@ static void prom_daemonize(const char *daemon_dir) {
   pr_fsio_chdir(daemon_dir, 0);
 }
 
-static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
-    const char *username, const char *password) {
+static void prom_exporter_write_pidfile(struct prom_exporter *exporter) {
+  int fd;
+  char buf[32];
+  size_t buflen;
+
+  if (exporter->pidfile_path == NULL) {
+    return;
+  }
+
+  fd = open(exporter->pidfile_path, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "unable to open PrometheusPidFile '%s': %s", exporter->pidfile_path,
+      strerror(errno));
+    return;
+  }
+
+  buflen = (size_t) pr_snprintf(buf, sizeof(buf), "%lu\n", (unsigned long) exporter->pid);
+  if (write(fd, buf, buflen) < 0) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "error writing PrometheusPidFile '%s': %s", exporter->pidfile_path,
+      strerror(errno));
+  }
+
+  (void) close(fd);
+}
+
+static void prom_exporter_remove_pidfile(struct prom_exporter *exporter) {
+  if (exporter->pidfile_path == NULL) {
+    return;
+  }
+
+  (void) unlink(exporter->pidfile_path);
+}
+
+static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
+    const pr_netaddr_t *exporter_addr, const char *username,
+    const char *password) {
   pid_t exporter_pid;
   struct prom_dbh *dbh;
   char *exporter_chroot = NULL;
@@ -266,14 +308,15 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
 
     default:
       /* We're the parent. */
+      exporter->pid = exporter_pid;
+      prom_exporter_write_pidfile(exporter);
       return exporter_pid;
   }
 
   /* Reset the cached PID, so that it is correctly reflected in the logs. */
   session.pid = getpid();
 
-  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu",
-    (unsigned long) session.pid);
+  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu", (unsigned long) session.pid);
 
   prom_daemonize(prometheus_tables_dir);
 
@@ -306,9 +349,7 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
   if (getuid() == PR_ROOT_UID) {
     int res;
 
-    /* Chroot to the PrometheusTables/empty/ directory before dropping
-     * root privs.
-     */
+    /* Chroot to the PrometheusTables/empty/ directory before dropping root privs. */
     exporter_chroot = pdircat(prometheus_pool, prometheus_tables_dir, "empty",
       NULL);
     res = chroot(exporter_chroot);
@@ -337,16 +378,13 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
 
   pr_proctitle_set("(listening for Prometheus requests)");
 
-  /* Make the exporter process have the identity of the configured daemon
-   * User/Group.
-   */
+  /* Make the exporter process have the identity of the configured daemon User/Group. */
   session.uid = geteuid();
   session.gid = getegid();
   PRIVS_REVOKE
 
-  prometheus_exporter_http = prom_http_start(p, exporter_addr,
-    prometheus_registry, username, password);
-  if (prometheus_exporter_http == NULL) {
+  exporter->http = prom_http_start(p, exporter_addr, prometheus_registry, username, password);
+  if (exporter->http == NULL) {
     return 0;
   }
 
@@ -364,31 +402,29 @@ static pid_t prom_exporter_start(pool *p, const pr_netaddr_t *exporter_addr,
   }
 
   /* This function will exit once the exporter finishes. */
-  prom_http_run_loop(p, prometheus_exporter_http);
-
-  pr_trace_msg(trace_channel, 3, "exporter PID %lu exiting",
-    (unsigned long) session.pid);
+  prom_http_run_loop(p, exporter->http);
+  pr_trace_msg(trace_channel, 3, "exporter PID %lu exiting", (unsigned long) session.pid);
   exit(0);
 }
 
-static void prom_exporter_stop(pid_t exporter_pid) {
+static void prom_exporter_stop(struct prom_exporter *exporter) {
+  pid_t exporter_pid;
   int res, status;
   time_t start_time = time(NULL);
 
-  if (exporter_pid == 0) {
+  if (exporter == NULL || exporter->pid == 0) {
     /* Nothing to do. */
     return;
   }
 
-  pr_trace_msg(trace_channel, 3, "stopping exporter PID %lu",
-    (unsigned long) exporter_pid);
+  exporter_pid = exporter->pid;
+  pr_trace_msg(trace_channel, 3, "stopping exporter PID %lu", (unsigned long) exporter_pid);
 
   /* Litmus test: is the exporter process still around?  If not, there's
    * nothing for us to do.
    */
   res = kill(exporter_pid, 0);
-  if (res < 0 &&
-      errno == ESRCH) {
+  if (res < 0 && errno == ESRCH) {
     return;
   }
 
@@ -471,8 +507,9 @@ static void prom_exporter_stop(pid_t exporter_pid) {
     }
   }
 
-  exporter_pid = 0;
-  prometheus_exporter_http = NULL;
+  exporter->pid = 0;
+  exporter->http = NULL;
+  prom_exporter_remove_pidfile(exporter);
 }
 
 static pr_table_t *prom_get_labels(pool *p) {
@@ -749,6 +786,20 @@ MODRET set_prometheusexporter(cmd_rec *cmd) {
 MODRET set_prometheuslog(cmd_rec *cmd) {
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
+
+  (void) add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
+  return PR_HANDLED(cmd);
+}
+
+/* usage: PrometheusPidFile path */
+MODRET set_prometheuspidfile(cmd_rec *cmd) {
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  if (*cmd->argv[1] != '/') {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "must be a full path: '",
+      cmd->argv[1], "'", NULL));
+  }
 
   (void) add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
   return PR_HANDLED(cmd);
@@ -1412,9 +1463,11 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
   /* Unregister ourselves from all events. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
+  prom_exporter_stop(prometheus_exporter);
+
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
-  prometheus_exporter_http = NULL;
+  prometheus_exporter = NULL;
 
   (void) prom_registry_free(prometheus_registry);
   prometheus_registry = NULL;
@@ -1732,6 +1785,17 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
 
   prom_openlog();
 
+  if (prometheus_exporter == NULL) {
+    prometheus_exporter = pcalloc(prometheus_pool, sizeof(struct prom_exporter));
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "PrometheusPidFile", FALSE);
+  if (c != NULL) {
+    prometheus_exporter->pidfile_path = c->argv[0];
+  } else {
+    prometheus_exporter->pidfile_path = NULL;
+  }
+
   c = find_config(main_server->conf, CONF_PARAM, "PrometheusOptions", FALSE);
   while (c != NULL) {
     unsigned long opts = 0;
@@ -1808,9 +1872,9 @@ static void prom_postparse_ev(const void *event_data, void *user_data) {
     exporter_password = pr_env_get(c->pool, "PROMETHEUS_PASSWORD");
   }
 
-  prometheus_exporter_pid = prom_exporter_start(prometheus_pool, exporter_addr,
-    exporter_username, exporter_password);
-  if (prometheus_exporter_pid == 0) {
+  prometheus_exporter->pid = prom_exporter_start(prometheus_exporter,
+    prometheus_pool, exporter_addr, exporter_username, exporter_password);
+  if (prometheus_exporter->pid == 0) {
     prometheus_engine = FALSE;
     pr_log_debug(DEBUG0, MOD_PROMETHEUS_VERSION
       ": failed to start exporter process, disabling module");
@@ -1831,11 +1895,10 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
   pr_trace_msg(trace_channel, 17,
     "restart event received, resetting counters");
 
-  prom_exporter_stop(prometheus_exporter_pid);
+  prom_exporter_stop(prometheus_exporter);
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
-  prometheus_exporter_http = NULL;
 
   (void) prom_registry_free(prometheus_registry);
   prometheus_registry = NULL;
@@ -1849,7 +1912,7 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
 }
 
 static void prom_shutdown_ev(const void *event_data, void *user_data) {
-  prom_exporter_stop(prometheus_exporter_pid);
+  prom_exporter_stop(prometheus_exporter);
 
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
@@ -2202,11 +2265,12 @@ static int prom_sess_init(void) {
  */
 
 static conftable prometheus_conftab[] = {
-  { "PrometheusEngine",		set_prometheusengine,		NULL },
+  { "PrometheusEngine",		set_prometheusengine,		  NULL },
   { "PrometheusExporter",	set_prometheusexporter,		NULL },
-  { "PrometheusLog",		set_prometheuslog,		NULL },
+  { "PrometheusLog",		  set_prometheuslog,		    NULL },
   { "PrometheusOptions",	set_prometheusoptions,		NULL },
-  { "PrometheusTables",		set_prometheustables,		NULL },
+  { "PrometheusPidFile",	set_prometheuspidfile,		NULL },
+  { "PrometheusTables",		set_prometheustables,		  NULL },
   { NULL }
 };
 
