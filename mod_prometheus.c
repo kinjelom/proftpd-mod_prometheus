@@ -73,6 +73,10 @@ static int prometheus_saw_pass_cmd = FALSE;
 /* mod_prometheus option flags */
 #define PROM_OPT_ENABLE_LOG_MESSAGE_METRICS		0x001
 
+/* Forward declarations */
+static int prometheus_httpd_start(void);
+static int prometheus_httpd_stop(void);
+
 static void prom_event_decr(const char *metric_name, uint32_t decr, ...)
 #if defined(__GNUC__)
       __attribute__ ((sentinel));
@@ -368,6 +372,10 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
   struct prom_dbh *dbh;
   char *exporter_chroot = NULL;
 
+  /* Remember the daemon identity we want to run as after chroot(). */
+  uid_t run_uid = geteuid();
+  gid_t run_gid = getegid();
+
   exporter_pid = fork();
   switch (exporter_pid) {
     case -1:
@@ -376,35 +384,33 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
       return 0;
 
     case 0:
-      /* We're the child. */
+      /* Child. */
       break;
 
     default:
-      /* We're the parent. */
+      /* Parent. */
       exporter->pid = exporter_pid;
       prom_exporter_write_pidfile(exporter);
       return exporter_pid;
   }
 
-  /* Reset the cached PID, so that it is correctly reflected in the logs. */
+  /* Child path. */
   session.pid = getpid();
-
-  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu", (unsigned long) session.pid);
+  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu",
+               (unsigned long) session.pid);
 
   prom_daemonize(prometheus_tables_dir);
 
-  /* Install our own signal handlers (mostly to ignore signals) */
+  /* Ignore signals we don't care about. */
   (void) signal(SIGALRM, SIG_IGN);
-  (void) signal(SIGHUP, SIG_IGN);
+  (void) signal(SIGHUP,  SIG_IGN);
   (void) signal(SIGUSR1, SIG_IGN);
   (void) signal(SIGUSR2, SIG_IGN);
 
-  /* Remove our event listeners. */
+  /* We don't need any event listeners in the child. */
   pr_event_unregister(&prometheus_module, NULL, NULL);
 
-  /* Close any database handle inherited from our parent, and open a new
-   * one, per SQLite3 recommendation.
-   */
+  /* Re-open DB handle in child, per SQLite guidance. */
   (void) prom_db_close(prometheus_pool, prometheus_dbh);
   prometheus_dbh = NULL;
   dbh = prom_metric_db_open(prometheus_pool, prometheus_tables_dir);
@@ -412,25 +418,21 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
     pr_trace_msg(trace_channel, 3, "exporter error opening '%s' database: %s",
       prometheus_tables_dir, strerror(errno));
   }
-
   if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
     pr_trace_msg(trace_channel, 3, "exporter error setting registry dbh: %s",
       strerror(errno));
   }
 
+  /* Enter chroot as root, then drop privileges to the daemon identity. */
   PRIVS_ROOT
   if (getuid() == PR_ROOT_UID) {
     int res;
 
-    /* Chroot to the PrometheusTables/empty/ directory before dropping root privs. */
-    exporter_chroot = pdircat(prometheus_pool, prometheus_tables_dir, "empty",
-      NULL);
+    exporter_chroot = pdircat(prometheus_pool, prometheus_tables_dir, "empty", NULL);
     res = chroot(exporter_chroot);
     if (res < 0) {
       int xerrno = errno;
-
       PRIVS_RELINQUISH
-
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "unable to chroot to PrometheusTables/empty/ directory '%s': %s",
         exporter_chroot, strerror(xerrno));
@@ -439,22 +441,39 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
 
     if (chdir("/") < 0) {
       int xerrno = errno;
-
       PRIVS_RELINQUISH
-
       (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
         "unable to chdir to root directory within chroot: %s",
         strerror(xerrno));
       exit(0);
     }
+
+    /* Drop to the previously saved daemon identity (group first, then user). */
+    if (setgid(run_gid) < 0 || setegid(run_gid) < 0) {
+      int xerrno = errno;
+      PRIVS_RELINQUISH
+      (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+        "failed to setgid(%lu)/setegid(%lu): %s",
+        (unsigned long) run_gid, (unsigned long) run_gid, strerror(xerrno));
+      exit(0);
+    }
+    if (setuid(run_uid) < 0 || seteuid(run_uid) < 0) {
+      int xerrno = errno;
+      PRIVS_RELINQUISH
+      (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+        "failed to setuid(%lu)/seteuid(%lu): %s",
+        (unsigned long) run_uid, (unsigned long) run_uid, strerror(xerrno));
+      exit(0);
+    }
   }
-
-  pr_proctitle_set("(listening for Prometheus requests)");
-
-  /* Make the exporter process have the identity of the configured daemon User/Group. */
-  session.uid = geteuid();
-  session.gid = getegid();
+  /* Restore previous euid (should already be non-root after the above). */
   PRIVS_REVOKE
+
+  /* Update session identity (for logging/metrics). */
+  session.uid = run_uid;
+  session.gid = run_gid;
+
+  pr_proctitle_set("(listening for Prometheus exporter HTTP requests)");
 
   exporter->http = prom_http_start(p, exporter_addr, prometheus_registry, username, password);
   if (exporter->http == NULL) {
@@ -465,20 +484,24 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
       "exporter process running with UID %s, GID %s, restricted to '%s'",
       pr_uid2str(prometheus_pool, getuid()),
-      pr_gid2str(prometheus_pool, getgid()), exporter_chroot);
-
+      pr_gid2str(prometheus_pool, getgid()),
+      exporter_chroot);
   } else {
+    char *cwd = getcwd(NULL, 0);
     (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
       "exporter process running with UID %s, GID %s, located in '%s'",
       pr_uid2str(prometheus_pool, getuid()),
-      pr_gid2str(prometheus_pool, getgid()), getcwd(NULL, 0));
+      pr_gid2str(prometheus_pool, getgid()),
+      (cwd ? cwd : "(unknown)"));
+    if (cwd) free(cwd);
   }
 
-  /* This function will exit once the exporter finishes. */
+  /* Blocks until HTTP loop finishes; child then exits. */
   prom_http_run_loop(p, exporter->http);
   pr_trace_msg(trace_channel, 3, "exporter PID %lu exiting", (unsigned long) session.pid);
   exit(0);
 }
+
 
 static void prom_sigchld_ev(const void *event_data, void *user_data) {
   pid_t cpid, pid;
@@ -614,6 +637,7 @@ static void prom_exporter_stop(struct prom_exporter *exporter) {
 
     /* Poll every 500 millsecs. */
     pr_timer_usleep(500 * 1000);
+    res = waitpid(exporter_pid, &status, WNOHANG);
   }
 
   if (WIFEXITED(status)) {
@@ -722,7 +746,7 @@ static const struct prom_metric *prom_metric_with_labels(pool *p,
 
     key = va_arg(ap, char *);
   }
-  va_end(ap);
+  // va_end(ap); it should be done by prom_event_incr/decr/observe
 
   return metric;
 }
@@ -1658,7 +1682,7 @@ static void prom_log_msg_ev(const void *event_data, void *user_data) {
   (void) pr_table_add_dup(labels, "level", level_text, 0);
   res = prom_metric_incr(tmp_pool, metric, 1, labels);
   if (res < 0) {
-    pr_trace_msg(trace_channel, 19, "error increment %s: %s", metric_name,
+    pr_trace_msg(trace_channel, 19, "error incrementing %s: %s", metric_name,
       strerror(errno));
   }
 
@@ -2580,14 +2604,14 @@ static int prom_sess_init(void) {
  */
 
 static conftable prometheus_conftab[] = {
-  { "PrometheusEngine",		set_prometheusengine,		  NULL },
-  { "PrometheusExporter",	set_prometheusexporter,		NULL },
-  { "PrometheusLog",              set_prometheuslog,                NULL },
-  { "PrometheusHTTPLog",         set_prometheushttplog,           NULL },
-  { "PrometheusHTTPAccessLog",   set_prometheushttpaccesslog,     NULL },
-  { "PrometheusOptions",	set_prometheusoptions,		NULL },
-  { "PrometheusPidFile",	set_prometheuspidfile,		NULL },
-  { "PrometheusTables",		set_prometheustables,		  NULL },
+  { "PrometheusEngine", set_prometheusengine, NULL },
+  { "PrometheusExporter", set_prometheusexporter, NULL },
+  { "PrometheusLog", set_prometheuslog, NULL },
+  { "PrometheusHTTPLog", set_prometheushttplog, NULL },
+  { "PrometheusHTTPAccessLog", set_prometheushttpaccesslog, NULL },
+  { "PrometheusOptions", set_prometheusoptions, NULL },
+  { "PrometheusPidFile", set_prometheuspidfile, NULL },
+  { "PrometheusTables", set_prometheustables, NULL },
   { NULL }
 };
 
