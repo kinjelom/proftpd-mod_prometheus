@@ -407,6 +407,57 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
   exit(0);
 }
 
+static void prom_sigchld_ev(const void *event_data, void *user_data) {
+  pid_t cpid, pid;
+  int status;
+
+  if (prometheus_exporter == NULL || prometheus_exporter->pid <= 0) {
+    return;
+  }
+
+  if (event_data != NULL) {
+    cpid = *((const pid_t *) event_data);
+    if (cpid != prometheus_exporter->pid) {
+      return;
+    }
+  }
+
+  pid = waitpid(prometheus_exporter->pid, &status, WNOHANG);
+  if (pid <= 0) {
+    if (pid < 0 && errno == ECHILD) {
+      pr_event_unregister(&prometheus_module, "core.signal.CHLD",
+        prom_sigchld_ev);
+    }
+
+    return;
+  }
+
+  if (WIFEXITED(status)) {
+    int exit_status = WEXITSTATUS(status);
+
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "exporter process ID %lu terminated normally, with exit status %d",
+      (unsigned long) pid, exit_status);
+
+  } else if (WIFSIGNALED(status)) {
+    (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+      "exporter process ID %lu died from signal %d",
+      (unsigned long) pid, WTERMSIG(status));
+
+    if (WCOREDUMP(status)) {
+      (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
+        "exporter process ID %lu created a coredump",
+        (unsigned long) pid);
+    }
+  }
+
+  prometheus_exporter->pid = 0;
+  prometheus_exporter->http = NULL;
+  prom_exporter_remove_pidfile(prometheus_exporter);
+
+  pr_event_unregister(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev);
+}
+
 static void prom_exporter_stop(struct prom_exporter *exporter) {
   pid_t exporter_pid;
   int res, status;
@@ -793,17 +844,29 @@ MODRET set_prometheuslog(cmd_rec *cmd) {
 
 /* usage: PrometheusPidFile path */
 MODRET set_prometheuspidfile(cmd_rec *cmd) {
+  /* Expect exactly one argument after the directive name */
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
-  if (*cmd->argv[1] != '/') {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "must be a full path: '",
-      cmd->argv[1], "'", NULL));
+  /* In ProFTPD, cmd->argv[] is void*; cast before using it as a string */
+  const char *path = (const char *) cmd->argv[1];
+
+  if (path == NULL || *path == '\0') {
+    CONF_ERROR(cmd, "PrometheusPidFile requires a non-empty path");
   }
 
-  (void) add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
+  /* Require an absolute path to avoid surprises */
+  if (path[0] != '/') {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+      "must be an absolute path: '", path, "'", NULL));
+  }
+
+  /* Store the value in the config tree; the core will dup into the right pool */
+  (void) add_config_param_str(cmd->argv[0], 1, path);
+
   return PR_HANDLED(cmd);
 }
+
 
 /* usage: PrometheusOptions opt1 ... optN */
 MODRET set_prometheusoptions(cmd_rec *cmd) {
@@ -1935,6 +1998,8 @@ static void prom_startup_ev(const void *event_data, void *user_data) {
     prometheus_engine = FALSE;
     return;
   }
+
+  pr_event_register(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev, NULL);
 }
 
 static void prom_timeout_idle_ev(const void *event_data, void *user_data) {
