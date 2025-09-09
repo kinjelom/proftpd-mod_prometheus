@@ -110,7 +110,7 @@ static void request_completed_cb(void *cls, struct MHD_Connection *conn, void **
     }
   }
 
-  pr_trace_msg(trace_channel, 12, "request completed from %s (termination_code=%d)", ip, (int) toe);
+  pr_trace_msg(trace_channel, 7, "request completed from %s (termination_code=%d)", ip, (int) toe);
 }
 
 static void log_cb(void *user_data, const char *fmt, va_list msg) {
@@ -426,8 +426,7 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
           } else {
             /* Wrong password. */
-            pr_trace_msg(trace_channel, 19, "/metrics request from '%s' used wrong password, rejecting",
-              request_username);
+            pr_trace_msg(trace_channel, 19, "/metrics request from '%s' used wrong password, rejecting", request_username);
             auth_failed = TRUE;
           }
 
@@ -467,8 +466,7 @@ static enum MHD_Result handle_request_cb(void *user_data,
     xerrno = errno;
 
     if (text == NULL) {
-      pr_trace_msg(trace_channel, 3, "error getting registry text: %s",
-        strerror(xerrno));
+      pr_trace_msg(trace_channel, 3, "error getting registry text: %s", strerror(xerrno));
 
       switch (xerrno) {
         case ENOENT:
@@ -503,25 +501,27 @@ static enum MHD_Result handle_request_cb(void *user_data,
     textlen = strlen(text);
     status_code = MHD_HTTP_OK;
 
+    const size_t preview_max = 64;
+    const int preview_len = (int) (textlen < preview_max ? textlen : preview_max);
+
     use_gzip = can_gzip(conn);
     if (use_gzip == TRUE) {
       const char *gzipped_text = NULL;
       size_t gzipped_textlen = 0;
-
-      pr_trace_msg(trace_channel, 12, "client indicates support for gzip-compressed content, "
-        "attempting to compress text (%lu bytes):\n%.*s", (unsigned long) textlen, (int) textlen, text);
+      pr_trace_msg(trace_channel, 19, "gzip supported; compressing metrics (len=%lu, preview=%.*s%s)",
+                (unsigned long) textlen, preview_len, text, textlen > preview_max ? "…" : "");
       gzipped_text = gzip_text(resp_pool, text, textlen, &gzipped_textlen);
       if (gzipped_text != NULL) {
         text = gzipped_text;
         textlen = gzipped_textlen;
-        pr_trace_msg(trace_channel, 19, "registry text:\n(gzip compressed, %lu bytes)", (size_t) textlen);
-
+        pr_trace_msg(trace_channel, 19, "registry text (gzip compressed, %lu bytes)", (size_t) textlen);
       } else {
         use_gzip = FALSE;
       }
 
     } else {
-      pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen, text);
+      pr_trace_msg(trace_channel, 19, "registry text (len=%lu, preview=%.*s%s)",
+                (unsigned long) textlen, preview_len, text, textlen > preview_max ? "…" : "");
     }
 
     resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_MUST_COPY);
@@ -539,15 +539,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
     return res;
   }
 
-  /* Note that we could use 404 Not Found here, but using 400 Bad Request
-   * leaks less information.
-   */
+  /* Note that we could use 404 Not Found here, but using 400 Bad Request leaks less information. */
   status_code = MHD_HTTP_BAD_REQUEST;
   text = "Bad Request\n";
   textlen = strlen(text);
 
-  resp = MHD_create_response_from_buffer(textlen, (void *) text,
-    MHD_RESPMEM_PERSISTENT);
+  resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_PERSISTENT);
   (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
   res = MHD_queue_response(conn, status_code, resp);
   MHD_destroy_response(resp);
