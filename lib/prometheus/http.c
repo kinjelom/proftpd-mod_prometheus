@@ -90,43 +90,49 @@ static const char *http_password = NULL;
 static const char *trace_channel = "prometheus.http";
 static const char *clf_channel = "prometheus.http.clf";
 
-static void log_cb(void *user_data, const char *fmt, va_list msg) {
-  if (prometheus_httpd_logfd >= 0) {
-    char buf[1024];
+/* Logs for MHD_OPTION_NOTIFY_COMPLETED */
+static void request_completed_cb(void *cls, struct MHD_Connection *conn, void **con_cls, enum MHD_RequestTerminationCode toe) {
+  const union MHD_ConnectionInfo *ci;
+  const struct sockaddr *sa = NULL;
+  char ip[64] = "unknown";
 
-    vsnprintf(buf, sizeof(buf), fmt, msg);
-    pr_log_writefile(prometheus_httpd_logfd, MOD_PROMETHEUS_VERSION,
-      "%s", buf);
-
-  } else {
-    pr_trace_vmsg(trace_channel, 7, fmt, msg);
+  ci = MHD_get_connection_info(conn, MHD_CONNECTION_INFO_CLIENT_ADDRESS, NULL);
+  if (ci != NULL && ci->client_addr != NULL) {
+    sa = ci->client_addr;
+    if (sa->sa_family == AF_INET) {
+      const struct sockaddr_in *sin = (const struct sockaddr_in *) sa;
+      pr_inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)-1);
+#if defined(PR_USE_IPV6)
+    } else if (sa->sa_family == AF_INET6) {
+      const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *) sa;
+      pr_inet_ntop(AF_INET6, &sin6->sin6_addr, ip, sizeof(ip)-1);
+#endif
+    }
   }
+
+  pr_trace_msg(trace_channel, 12, "request completed from %s (termination_code=%d)", ip, (int) toe);
 }
 
-static void panic_cb(void *user_data, const char *file, unsigned int lineno,
-    const char *reason) {
-  int fd = prometheus_httpd_logfd;
+static void log_cb(void *user_data, const char *fmt, va_list msg) {
+  pr_trace_vmsg(trace_channel, 7, fmt, msg);
+}
 
-  if (fd < 0) {
-    fd = prometheus_logfd;
-  }
-
-  (void) pr_log_writefile(fd, MOD_PROMETHEUS_VERSION,
+static void panic_cb(void *user_data, const char *file, unsigned int lineno, const char *reason) {
+  (void) pr_log_writefile(prometheus_logfd, MOD_PROMETHEUS_VERSION,
     "microhttpd panic: [%s:%u] %s", file, lineno, reason);
+  abort();
 }
 
 static int can_gzip(struct MHD_Connection *conn) {
 #if defined(HAVE_ZLIB_H)
   const char *accept_encoding, *gzip_encoding = NULL;
 
-  accept_encoding = MHD_lookup_connection_value(conn, MHD_HEADER_KIND,
-    MHD_HTTP_HEADER_ACCEPT_ENCODING);
+  accept_encoding = MHD_lookup_connection_value(conn, MHD_HEADER_KIND, MHD_HTTP_HEADER_ACCEPT_ENCODING);
   if (accept_encoding == NULL) {
     return FALSE;
   }
 
-  pr_trace_msg(trace_channel, 19, "found Accept-Encoding request header: '%s'",
-    accept_encoding);
+  pr_trace_msg(trace_channel, 19, "found Accept-Encoding request header: '%s'", accept_encoding);
 
   if (strcmp(accept_encoding, "*") == 0) {
     return TRUE;
@@ -225,8 +231,7 @@ static const char *gzip_text(pool *p, const char *text, size_t text_len,
     Z_DEFAULT_STRATEGY);
   if (res != Z_OK) {
     deflateEnd(zstrm);
-    pr_trace_msg(trace_channel, 1,
-      "error initializing zlib for deflation: %s (%d)",
+    pr_trace_msg(trace_channel, 1, "error initializing zlib for deflation: %s (%d)",
       zstrm->msg ? zstrm->msg : zlib_strerror(res), res);
     return NULL;
   }
@@ -242,13 +247,11 @@ static const char *gzip_text(pool *p, const char *text, size_t text_len,
   res = deflate(zstrm, Z_FINISH);
   if (res != Z_STREAM_END) {
     deflateEnd(zstrm);
-    pr_trace_msg(trace_channel, 1, "error compressing data: %s",
-      zstrm->msg ? zstrm->msg : zlib_strerror(res));
+    pr_trace_msg(trace_channel, 1, "error compressing data: %s", zstrm->msg ? zstrm->msg : zlib_strerror(res));
     return NULL;
   }
 
-  pr_trace_msg(trace_channel, 19, "available compressed text: %lu bytes",
-    (unsigned long) zstrm->total_out);
+  pr_trace_msg(trace_channel, 19, "available compressed text: %lu bytes", (unsigned long) zstrm->total_out);
   *gzipped_textlen = zstrm->total_out;
   gzipped_text = pcalloc(p, *gzipped_textlen);
   memcpy((char *) gzipped_text, output_buf, *gzipped_textlen);
@@ -319,8 +322,7 @@ static void log_clf(pool *p, struct MHD_Connection *conn, const char *username,
     return;
   }
 
-  conn_info = MHD_get_connection_info(conn, MHD_CONNECTION_INFO_CLIENT_ADDRESS,
-    NULL);
+  conn_info = MHD_get_connection_info(conn, MHD_CONNECTION_INFO_CLIENT_ADDRESS, NULL);
   if (username == NULL) {
     username = "-";
   }
@@ -333,13 +335,6 @@ static void log_clf(pool *p, struct MHD_Connection *conn, const char *username,
   pr_trace_msg(clf_channel, clf_level, "%s - %s [%s] \"%s %s %s\" %u %lu",
     remote_ip, username, timestamp, http_method, http_uri, http_version,
     status_code, (unsigned long) resplen);
-
-  if (prometheus_httpd_access_logfd >= 0) {
-    (void) pr_log_writefile(prometheus_httpd_access_logfd, MOD_PROMETHEUS_VERSION,
-      "%s - %s [%s] \"%s %s %s\" %u %lu",
-      remote_ip, username, timestamp, http_method, http_uri, http_version,
-      status_code, (unsigned long) resplen);
-  }
 }
 
 #if MHD_VERSION < 0x00097002
@@ -370,15 +365,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
     text = "Method Not Allowed\n";
     textlen = strlen(text);
 
-    resp = MHD_create_response_from_buffer(textlen, (void *) text,
-      MHD_RESPMEM_PERSISTENT);
-    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-      "text/plain");
+    resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_PERSISTENT);
+    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
     res = MHD_queue_response(conn, status_code, resp);
     MHD_destroy_response(resp);
 
-    log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
-      status_code, textlen);
+    log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version, status_code, textlen);
     destroy_pool(resp_pool);
 
     return res;
@@ -389,15 +381,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
     text = "OK\n";
     textlen = strlen(text);
 
-    resp = MHD_create_response_from_buffer(textlen, (void *) text,
-      MHD_RESPMEM_PERSISTENT);
-    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-      "text/plain");
+    resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_PERSISTENT);
+    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
     res = MHD_queue_response(conn, status_code, resp);
     MHD_destroy_response(resp);
 
-    log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
-      status_code, textlen);
+    log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version, status_code, textlen);
     destroy_pool(resp_pool);
 
     return res;
@@ -411,15 +400,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
       char *request_password = NULL;
       int auth_failed = TRUE;
 
-      pr_trace_msg(trace_channel, 19,
-        "exporter received /metrics request, validating basic auth");
+      pr_trace_msg(trace_channel, 19, "exporter received /metrics request, validating basic auth");
 
-      request_username = MHD_basic_auth_get_username_password(conn,
-        &request_password);
+      request_username = MHD_basic_auth_get_username_password(conn, &request_password);
 
       if (request_username == NULL) {
-        pr_trace_msg(trace_channel, 19,
-          "/metrics request lacks required credentials, rejecting");
+        pr_trace_msg(trace_channel, 19, "/metrics request lacks required credentials, rejecting");
         auth_failed = TRUE;
 
       } else {
@@ -429,35 +415,31 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
             /* Authenticated. */
             auth_failed = FALSE;
-            pr_trace_msg(trace_channel, 19,
-              "/metrics request from '%s' validated", request_username);
+            pr_trace_msg(trace_channel, 19, "/metrics request from '%s' validated", request_username);
 
             /* Free the username memory from libmicrohttpd, but keep a
              * copy for ourselves, for CLF logging, first.
              */
             ptr = request_username;
             request_username = pstrdup(resp_pool, ptr);
-            free(ptr);
+            MHD_free(ptr);
 
           } else {
             /* Wrong password. */
-            pr_trace_msg(trace_channel, 19,
-              "/metrics request from '%s' used wrong password, rejecting",
+            pr_trace_msg(trace_channel, 19, "/metrics request from '%s' used wrong password, rejecting",
               request_username);
             auth_failed = TRUE;
           }
 
         } else {
           /* Wrong username. */
-          pr_trace_msg(trace_channel, 19,
-            "/metrics request used wrong username '%s', rejecting",
-            request_username);
+          pr_trace_msg(trace_channel, 19, "/metrics request used wrong username '%s', rejecting", request_username);
           auth_failed = TRUE;
         }
       }
 
       if (request_password != NULL) {
-        free(request_password);
+        MHD_free(request_password);
         request_password = NULL;
       }
 
@@ -466,15 +448,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
         textlen = strlen(text);
         status_code = MHD_HTTP_UNAUTHORIZED;
 
-        resp = MHD_create_response_from_buffer(textlen, (void *) text,
-          MHD_RESPMEM_PERSISTENT);
-        (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-          "text/plain");
+        resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_PERSISTENT);
+        (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
         res = MHD_queue_basic_auth_fail_response(conn, http_realm, resp);
         MHD_destroy_response(resp);
 
-        log_clf(resp_pool, conn, request_username, http_method, http_uri,
-          http_version, status_code, textlen);
+        log_clf(resp_pool, conn, request_username, http_method, http_uri, http_version, status_code, textlen);
         destroy_pool(resp_pool);
 
         return res;
@@ -510,15 +489,12 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
       textlen = strlen(text);
 
-      resp = MHD_create_response_from_buffer(textlen, (void *) text,
-        MHD_RESPMEM_PERSISTENT);
-      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-        "text/plain");
+      resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_PERSISTENT);
+      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
       res = MHD_queue_response(conn, status_code, resp);
       MHD_destroy_response(resp);
 
-      log_clf(resp_pool, conn, request_username, http_method, http_uri,
-        http_version, status_code, textlen);
+      log_clf(resp_pool, conn, request_username, http_method, http_uri, http_version, status_code, textlen);
       destroy_pool(resp_pool);
 
       return res;
@@ -532,40 +508,32 @@ static enum MHD_Result handle_request_cb(void *user_data,
       const char *gzipped_text = NULL;
       size_t gzipped_textlen = 0;
 
-      pr_trace_msg(trace_channel, 12,
-        "client indicates support for gzip-compressed content, "
-        "attempting to compress text (%lu bytes):\n%.*s",
-        (unsigned long) textlen, (int) textlen, text);
+      pr_trace_msg(trace_channel, 12, "client indicates support for gzip-compressed content, "
+        "attempting to compress text (%lu bytes):\n%.*s", (unsigned long) textlen, (int) textlen, text);
       gzipped_text = gzip_text(resp_pool, text, textlen, &gzipped_textlen);
       if (gzipped_text != NULL) {
         text = gzipped_text;
         textlen = gzipped_textlen;
-        pr_trace_msg(trace_channel, 19,
-          "registry text:\n(gzip compressed, %lu bytes)", (size_t) textlen);
+        pr_trace_msg(trace_channel, 19, "registry text:\n(gzip compressed, %lu bytes)", (size_t) textlen);
 
       } else {
         use_gzip = FALSE;
       }
 
     } else {
-      pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen,
-        text);
+      pr_trace_msg(trace_channel, 19, "registry text:\n%.*s", (int) textlen, text);
     }
 
-    resp = MHD_create_response_from_buffer(textlen, (void *) text,
-      MHD_RESPMEM_MUST_COPY);
-    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-      "text/plain");
+    resp = MHD_create_response_from_buffer(textlen, (void *) text, MHD_RESPMEM_MUST_COPY);
+    (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
     if (use_gzip == TRUE) {
-      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_ENCODING,
-        "gzip");
+      (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_ENCODING, "gzip");
     }
 
     res = MHD_queue_response(conn, status_code, resp);
     MHD_destroy_response(resp);
 
-    log_clf(resp_pool, conn, request_username, http_method, http_uri,
-      http_version, status_code, textlen);
+    log_clf(resp_pool, conn, request_username, http_method, http_uri, http_version, status_code, textlen);
     destroy_pool(resp_pool);
 
     return res;
@@ -580,21 +548,18 @@ static enum MHD_Result handle_request_cb(void *user_data,
 
   resp = MHD_create_response_from_buffer(textlen, (void *) text,
     MHD_RESPMEM_PERSISTENT);
-  (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE,
-    "text/plain");
+  (void) MHD_add_response_header(resp, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
   res = MHD_queue_response(conn, status_code, resp);
   MHD_destroy_response(resp);
 
-  log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version,
-    status_code, textlen);
+  log_clf(resp_pool, conn, NULL, http_method, http_uri, http_version, status_code, textlen);
   destroy_pool(resp_pool);
 
   return res;
 }
 
 struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
-    struct prom_registry *registry, const char *username,
-    const char *password) {
+    struct prom_registry *registry, const char *username, const char *password) {
   struct prom_http *http;
   pool *http_pool;
   struct MHD_Daemon *mhd;
@@ -616,18 +581,18 @@ struct prom_http *prom_http_start(pool *p, const pr_netaddr_t *addr,
   http->registry = registry;
 
   http_port = ntohs(pr_netaddr_get_port(addr));
-  pr_trace_msg(trace_channel, 9, "starting exporter %son %s:%u",
-    username != NULL ? "requiring basic auth " : "",
+  pr_trace_msg(trace_channel, 9, "starting exporter %son %s:%u", username != NULL ? "requiring basic auth " : "",
     pr_netaddr_get_ipstr(addr), http_port);
 
   flags = MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_ERROR_LOG|MHD_USE_DEBUG;
-  mhd = MHD_start_daemon(flags, http_port, NULL, NULL,
-    handle_request_cb, http,
-    MHD_OPTION_EXTERNAL_LOGGER, log_cb, NULL,
+  mhd = MHD_start_daemon(flags, http_port, NULL /* no apc callback */, NULL /* apc cls */, handle_request_cb, http,
+    MHD_OPTION_EXTERNAL_LOGGER, log_cb, NULL /* cls */,
+    MHD_OPTION_NOTIFY_COMPLETED, request_completed_cb, NULL /* cls */,
     MHD_OPTION_CONNECTION_LIMIT, 1,
     MHD_OPTION_CONNECTION_TIMEOUT, 10,
     MHD_OPTION_SOCK_ADDR, pr_netaddr_get_sockaddr(addr),
-    MHD_OPTION_END);
+    MHD_OPTION_END
+  );
   if (mhd == NULL) {
     int xerrno = errno;
 

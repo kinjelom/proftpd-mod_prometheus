@@ -63,8 +63,6 @@
 extern xaset_t *server_list;
 
 int prometheus_logfd = -1;
-int prometheus_httpd_logfd = -1;
-int prometheus_httpd_access_logfd = -1;
 module prometheus_module;
 pool *prometheus_pool = NULL;
 
@@ -160,8 +158,7 @@ static int prom_mkdir(const char *dir, uid_t uid, gid_t gid, mode_t mode) {
   return 0;
 }
 
-static int prom_mkpath(pool *p, const char *path, uid_t uid, gid_t gid,
-    mode_t mode) {
+static int prom_mkpath(pool *p, const char *path, uid_t uid, gid_t gid, mode_t mode) {
   char *currpath = NULL, *tmppath = NULL;
   struct stat st;
 
@@ -229,93 +226,17 @@ static int prom_openlog(void) {
     }
   }
 
-  c = find_config(main_server->conf, CONF_PARAM, "PrometheusHTTPLog", FALSE);
-  if (c != NULL) {
-    const char *path;
-
-    path = c->argv[0];
-
-    if (strncasecmp(path, "none", 5) != 0) {
-      int xerrno;
-
-      pr_signals_block();
-      PRIVS_ROOT
-      res = pr_log_openfile(path, &prometheus_httpd_logfd, 0600);
-      xerrno = errno;
-      PRIVS_RELINQUISH
-      pr_signals_unblock();
-
-      if (res < 0) {
-        if (res == -1) {
-          pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPLog '%s': %s", path,
-            strerror(xerrno));
-
-        } else if (res == PR_LOG_WRITABLE_DIR) {
-          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPLog '%s': parent directory is "
-            "world-writable", path);
-
-        } else if (res == PR_LOG_SYMLINK) {
-          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPLog '%s': cannot log to "
-            "a symlink", path);
-        }
-      }
-    }
-  }
-
-  c = find_config(main_server->conf, CONF_PARAM, "PrometheusHTTPAccessLog", FALSE);
-  if (c != NULL) {
-    const char *path;
-
-    path = c->argv[0];
-
-    if (strncasecmp(path, "none", 5) != 0) {
-      int xerrno;
-
-      pr_signals_block();
-      PRIVS_ROOT
-      res = pr_log_openfile(path, &prometheus_httpd_access_logfd, 0600);
-      xerrno = errno;
-      PRIVS_RELINQUISH
-      pr_signals_unblock();
-
-      if (res < 0) {
-        if (res == -1) {
-          pr_log_pri(PR_LOG_NOTICE, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPAccessLog '%s': %s", path,
-            strerror(xerrno));
-
-        } else if (res == PR_LOG_WRITABLE_DIR) {
-          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPAccessLog '%s': parent directory is "
-            "world-writable", path);
-
-        } else if (res == PR_LOG_SYMLINK) {
-          pr_log_pri(PR_LOG_WARNING, MOD_PROMETHEUS_VERSION
-            ": notice: unable to open PrometheusHTTPAccessLog '%s': cannot log to "
-            "a symlink", path);
-        }
-      }
-    }
-  }
-
   return res;
 }
 
-/* We don't want to do the full daemonize() as provided in main.c; we
- * already forked.
- */
+/* We don't want to do the full daemonize() as provided in main.c; we already forked. */
 static void prom_daemonize(const char *daemon_dir) {
 #ifndef HAVE_SETSID
   int tty_fd;
 #endif
 
 #ifdef HAVE_SETSID
-  /* setsid() is the preferred way to disassociate from the
-   * controlling terminal
-   */
+  /* setsid() is the preferred way to disassociate from the controlling terminal */
   setsid();
 #else
   /* Open /dev/tty to access our controlling tty (if any) */
@@ -388,8 +309,7 @@ static void prom_exporter_remove_pidfile(struct prom_exporter *exporter) {
 }
 
 static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
-    const pr_netaddr_t *exporter_addr, const char *username,
-    const char *password) {
+    const pr_netaddr_t *exporter_addr, const char *username, const char *password) {
   pid_t exporter_pid;
   struct prom_dbh *dbh;
   char *exporter_chroot = NULL;
@@ -401,8 +321,7 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
   exporter_pid = fork();
   switch (exporter_pid) {
     case -1:
-      pr_log_pri(PR_LOG_ALERT,
-        MOD_PROMETHEUS_VERSION ": unable to fork: %s", strerror(errno));
+      pr_log_pri(PR_LOG_ALERT, MOD_PROMETHEUS_VERSION ": unable to fork: %s", strerror(errno));
       return 0;
 
     case 0:
@@ -418,8 +337,7 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
 
   /* Child path. */
   session.pid = getpid();
-  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu",
-               (unsigned long) session.pid);
+  pr_trace_msg(trace_channel, 3, "forked exporter PID %lu", (unsigned long) session.pid);
 
   prom_daemonize(prometheus_tables_dir);
 
@@ -437,12 +355,10 @@ static pid_t prom_exporter_start(struct prom_exporter *exporter, pool *p,
   prometheus_dbh = NULL;
   dbh = prom_metric_db_open(prometheus_pool, prometheus_tables_dir);
   if (dbh == NULL) {
-    pr_trace_msg(trace_channel, 3, "exporter error opening '%s' database: %s",
-      prometheus_tables_dir, strerror(errno));
+    pr_trace_msg(trace_channel, 3, "exporter error opening '%s' database: %s", prometheus_tables_dir, strerror(errno));
   }
   if (prom_registry_set_dbh(prometheus_registry, dbh) < 0) {
-    pr_trace_msg(trace_channel, 3, "exporter error setting registry dbh: %s",
-      strerror(errno));
+    pr_trace_msg(trace_channel, 3, "exporter error setting registry dbh: %s", strerror(errno));
   }
 
   /* Enter chroot as root, then drop privileges to the daemon identity. */
@@ -543,10 +459,8 @@ static void prom_sigchld_ev(const void *event_data, void *user_data) {
   pid = waitpid(prometheus_exporter->pid, &status, WNOHANG);
   if (pid <= 0) {
     if (pid < 0 && errno == ECHILD) {
-      pr_event_unregister(&prometheus_module, "core.signal.CHLD",
-        prom_sigchld_ev);
+      pr_event_unregister(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev);
     }
-
     return;
   }
 
@@ -576,8 +490,7 @@ static void prom_sigchld_ev(const void *event_data, void *user_data) {
   pr_event_unregister(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev);
 
   if (prometheus_engine == TRUE) {
-    pr_trace_msg(trace_channel, 3,
-      "exporter process exited, restarting");
+    pr_trace_msg(trace_channel, 3, "exporter process exited, starting new one");
     (void) prometheus_httpd_start();
   }
 }
@@ -709,8 +622,7 @@ static int prometheus_httpd_start(void) {
     return -1;
   }
 
-  pr_event_register(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev,
-    NULL);
+  pr_event_register(&prometheus_module, "core.signal.CHLD", prom_sigchld_ev, NULL);
 
   pr_trace_msg(trace_channel, 7, "started Prometheus exporter PID %lu",
     (unsigned long) prometheus_exporter->pid);
@@ -1623,15 +1535,6 @@ static void prom_exit_ev(const void *event_data, void *user_data) {
     prometheus_logfd = -1;
   }
 
-  if (prometheus_httpd_logfd >= 0) {
-    (void) close(prometheus_httpd_logfd);
-    prometheus_httpd_logfd = -1;
-  }
-
-  if (prometheus_httpd_access_logfd >= 0) {
-    (void) close(prometheus_httpd_access_logfd);
-    prometheus_httpd_access_logfd = -1;
-  }
 }
 
 static void prom_log_msg_ev(const void *event_data, void *user_data) {
@@ -1735,16 +1638,6 @@ static void prom_mod_unload_ev(const void *event_data, void *user_data) {
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
-
-  if (prometheus_httpd_logfd >= 0) {
-    (void) close(prometheus_httpd_logfd);
-    prometheus_httpd_logfd = -1;
-  }
-
-  if (prometheus_httpd_access_logfd >= 0) {
-    (void) close(prometheus_httpd_access_logfd);
-    prometheus_httpd_access_logfd = -1;
-  }
 }
 #endif /* PR_SHARED_MODULE */
 
@@ -2179,16 +2072,6 @@ static void prom_restart_ev(const void *event_data, void *user_data) {
    */
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
-
-  if (prometheus_httpd_logfd >= 0) {
-    (void) close(prometheus_httpd_logfd);
-    prometheus_httpd_logfd = -1;
-  }
-
-  if (prometheus_httpd_access_logfd >= 0) {
-    (void) close(prometheus_httpd_access_logfd);
-    prometheus_httpd_access_logfd = -1;
-  }
 }
 
 static void prom_shutdown_ev(const void *event_data, void *user_data) {
@@ -2202,16 +2085,6 @@ static void prom_shutdown_ev(const void *event_data, void *user_data) {
 
   (void) close(prometheus_logfd);
   prometheus_logfd = -1;
-
-  if (prometheus_httpd_logfd >= 0) {
-    (void) close(prometheus_httpd_logfd);
-    prometheus_httpd_logfd = -1;
-  }
-
-  if (prometheus_httpd_access_logfd >= 0) {
-    (void) close(prometheus_httpd_access_logfd);
-    prometheus_httpd_access_logfd = -1;
-  }
 }
 
 static void prom_sighup_ev(const void *event_data, void *user_data) {
@@ -2629,8 +2502,6 @@ static conftable prometheus_conftab[] = {
   { "PrometheusEngine", set_prometheusengine, NULL },
   { "PrometheusExporter", set_prometheusexporter, NULL },
   { "PrometheusLog", set_prometheuslog, NULL },
-  { "PrometheusHTTPLog", set_prometheushttplog, NULL },
-  { "PrometheusHTTPAccessLog", set_prometheushttpaccesslog, NULL },
   { "PrometheusOptions", set_prometheusoptions, NULL },
   { "PrometheusPidFile", set_prometheuspidfile, NULL },
   { "PrometheusTables", set_prometheustables, NULL },
